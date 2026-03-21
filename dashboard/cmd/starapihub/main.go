@@ -25,8 +25,8 @@ func buildRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&output, "output", "text", "Output format (text|json)")
 
 	rootCmd.AddCommand(validateCmd())
-	rootCmd.AddCommand(stubCmd("sync", "Sync desired state to upstream systems"))
-	rootCmd.AddCommand(stubCmd("diff", "Show drift between desired and actual state"))
+	rootCmd.AddCommand(syncCmd())
+	rootCmd.AddCommand(diffCmd())
 	rootCmd.AddCommand(stubCmd("bootstrap", "Bootstrap a fresh environment"))
 	rootCmd.AddCommand(stubCmd("health", "Check health of all upstream systems"))
 

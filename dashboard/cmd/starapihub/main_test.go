@@ -108,18 +108,23 @@ func TestValidateCommandInvalid(t *testing.T) {
 }
 
 func TestStubCommands(t *testing.T) {
-	rootCmd := buildRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"sync"})
+	// Only bootstrap and health remain as stubs (sync and diff are now implemented)
+	for _, subcmd := range []string{"bootstrap", "health"} {
+		t.Run(subcmd, func(t *testing.T) {
+			rootCmd := buildRootCmd()
+			buf := new(bytes.Buffer)
+			rootCmd.SetOut(buf)
+			rootCmd.SetErr(buf)
+			rootCmd.SetArgs([]string{subcmd})
 
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected stub command to return error")
-	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("expected 'not yet implemented' error, got: %v", err)
+			err := rootCmd.Execute()
+			if err == nil {
+				t.Fatalf("expected stub command %s to return error", subcmd)
+			}
+			if !strings.Contains(err.Error(), "not yet implemented") {
+				t.Errorf("expected 'not yet implemented' error for %s, got: %v", subcmd, err)
+			}
+		})
 	}
 }
 
