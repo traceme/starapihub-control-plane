@@ -64,6 +64,7 @@ type Snapshot struct {
 	Health    map[string]ServiceHealth `json:"health"`
 	Cookies   map[string]CookieStatus  `json:"cookies"`
 	LogStats  LogStats                 `json:"log_stats"`
+	Alerts    []store.Alert            `json:"alerts"`
 	UpdatedAt time.Time                `json:"updated_at"`
 }
 
@@ -134,10 +135,14 @@ func (s *SystemState) GetSnapshot() Snapshot {
 	ls.ByModel = copyMapStringInt(s.LogStats.ByModel)
 	ls.ByStatus = copyMapIntInt(s.LogStats.ByStatus)
 
+	alerts := make([]store.Alert, len(s.Alerts))
+	copy(alerts, s.Alerts)
+
 	return Snapshot{
 		Health:    health,
 		Cookies:   cookies,
 		LogStats:  ls,
+		Alerts:    alerts,
 		UpdatedAt: s.UpdatedAt,
 	}
 }

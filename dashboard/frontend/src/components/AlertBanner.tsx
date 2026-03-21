@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function AlertBanner({ alerts }: Props) {
-  const active = alerts.filter((a) => !a.acknowledged);
+  const active = (alerts || []).filter((a) => !a.acknowledged);
   if (active.length === 0) return null;
 
   const hasCritical = active.some((a) => a.type === 'critical');
