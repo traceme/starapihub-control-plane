@@ -1,11 +1,12 @@
 {
   "$schema": "https://www.getbifrost.ai/schema",
   "_comment": [
-    "PSEUDOCONFIG: Bifrost config.json template for the control plane deployment.",
+    "Bifrost config.json template for the control plane deployment.",
     "Place in Bifrost's app data directory (/app/data/config.json) or configure via Bifrost Web UI.",
     "The canonical schema is bifrost/transports/config.schema.json (~2700 lines).",
     "Secrets use env.VAR_NAME syntax to reference environment variables from bifrost.env.",
-    "Fields marked PSEUDOCONFIG may need adjustment based on your Bifrost version."
+    "All fields verified against Bifrost source code in Phase 1 capability audit.",
+    "See docs/capability-audit.md for struct definitions and JSON field names."
   ],
 
   "providers": {
@@ -82,8 +83,8 @@
     "virtual_keys": [],
     "routing_rules": [
       {
-        "_comment": "PSEUDOCONFIG: Example routing rule for lab traffic to ClewdR.",
-        "_note": "Verify CEL expression syntax against your Bifrost version.",
+        "_comment": "Example routing rule for lab traffic to ClewdR.",
+        "_note": "CEL expressions verified against Bifrost governance.go. See capability-audit.md.",
         "_example_only": true,
         "id": "rule-lab-to-clewdr",
         "name": "Route lab models to ClewdR pool",

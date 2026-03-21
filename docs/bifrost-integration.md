@@ -118,59 +118,75 @@ ClewdR exposes OpenAI-compatible endpoints, so it appears to Bifrost as an OpenA
   "providers": {
     // ... official providers above ...
 
-    // IMPORTANT: ClewdR instances are registered as separate "openai" providers
-    // with custom base URLs. Since Bifrost's provider key is the provider type
-    // (e.g., "openai"), and you can only have one config per type,
-    // ClewdR instances should be registered using Bifrost's custom provider
-    // feature or as separate keys within the "openai" provider.
+    // ClewdR instances MUST be registered as SEPARATE custom providers.
+    // Bifrost Keys do NOT have a per-key base_url field -- base_url is on
+    // NetworkConfig at the provider level. Therefore, each ClewdR instance
+    // needs its own provider entry with its own NetworkConfig.BaseURL.
     //
-    // Option A: Add ClewdR as extra keys under an OpenAI-compatible custom provider
-    // Option B: Use Bifrost's Web UI to create custom provider entries
+    // Register each ClewdR instance via POST /api/providers with
+    // custom_provider_config.base_provider_type = "openai".
+    // Custom provider names must NOT match standard provider names.
+    //
+    // _Corrected 2026-03-21: verified against core/schemas/provider.go:382-388
+    // and core/schemas/account.go:15-32. See capability-audit.md for full
+    // struct definitions._
 
-    // Using custom provider approach (PSEUDOCONFIG — verify with Bifrost docs):
+    // Official OpenAI provider (standard provider, not custom):
     "openai": {
       "keys": [
-        // Official OpenAI key
         {
           "id": "openai-official",
           "name": "OpenAI Official",
-          "value": "sk-...",
+          "value": "env.OPENAI_API_KEY",
           "models": ["gpt-4o", "gpt-4o-mini"],
-          "weight": 1.0
-        },
-        // ClewdR instances as OpenAI-compatible keys with base_url override
-        // NOTE: Per-key base_url may require custom_provider_config
-        // Check your Bifrost version for exact support
-        {
-          "id": "clewdr-1",
-          "name": "ClewdR Instance 1",
-          "value": "clewdr-admin-password-1",
-          "models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
-          "weight": 0.5
+          "weight": 1.0,
+          "enabled": true
         }
       ],
       "network_config": {
-        "base_url": ""  // Default for official OpenAI
-      },
-      // Custom provider config for ClewdR (PSEUDOCONFIG)
-      "custom_provider_config": {
-        "base_provider": "openai"
+        "default_request_timeout_in_seconds": 30,
+        "max_retries": 2,
+        "retry_backoff_initial": 500,
+        "retry_backoff_max": 5000
       }
     }
+    // ClewdR instances are added separately via POST /api/providers:
+    //
+    // curl -X POST http://bifrost:8080/api/providers \
+    //   -H "Content-Type: application/json" \
+    //   -d '{
+    //     "provider": "clewdr-1",
+    //     "keys": [{
+    //       "id": "clewdr-1-key",
+    //       "name": "ClewdR Instance 1",
+    //       "value": "env.CLEWDR_1_PASSWORD",
+    //       "models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+    //       "weight": 1.0,
+    //       "enabled": true
+    //     }],
+    //     "network_config": {
+    //       "base_url": "http://clewdr-1:8484",
+    //       "default_request_timeout_in_seconds": 120,
+    //       "max_retries": 0,
+    //       "stream_idle_timeout_in_seconds": 120
+    //     },
+    //     "custom_provider_config": {
+    //       "base_provider_type": "openai"
+    //     }
+    //   }'
   }
 }
 ```
 
-### Recommended Approach: Bifrost Web UI
+### Recommended Approach: API-Based Registration
 
-Given the complexity of mixing official and unofficial providers, the recommended approach for initial setup is:
+ClewdR instances are registered as custom providers via the Bifrost admin API. Each instance is a separate provider with `custom_provider_config.base_provider_type = "openai"` and its own `network_config.base_url`. The sync engine (Phase 3) will automate this via `POST /api/providers` for new instances and `PUT /api/providers/{provider}` for updates.
 
-1. Start Bifrost with a minimal config.json containing official provider keys
-2. Use the Bifrost Web UI (http://bifrost:8080) to:
-   - Add ClewdR instances as custom OpenAI-compatible providers
-   - Configure routing rules per model
-   - Set up virtual keys for New-API to use
-3. Export the resulting config for version control
+For initial manual setup, either:
+1. Use the Bifrost Web UI (http://bifrost:8080) to add custom providers interactively
+2. Use `curl` commands as shown in the config example above
+
+_Corrected 2026-03-21: verified against providers.go:177 (POST /api/providers) and core/schemas/provider.go:382-388 (CustomProviderConfig struct). See capability-audit.md for full API documentation._
 
 ### Provider Isolation
 
@@ -201,4 +217,4 @@ No external health checks needed for individual providers — Bifrost handles th
 | **Web UI** | Ad-hoc changes, initial provider setup. Access at http://bifrost:8080. |
 | **Database** | Persistent config stored in config.db. Survives container restarts. |
 
-The control plane generates config.json templates in `config/bifrost/`. See `docs/config-sync.md` for the sync workflow.
+The control plane generates config.json templates in `config/bifrost/`. See `docs/config-sync.md` for the sync workflow and `docs/capability-audit.md` for the authoritative API reference with verified struct definitions.

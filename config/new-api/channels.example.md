@@ -144,19 +144,25 @@ Clients continue using the stable logical names.
 Channels can also be created via New-API's admin REST API:
 
 ```bash
-# PSEUDOCONFIG: Verify endpoint path and field names against your New-API version
+# Verified: POST /api/channel/ uses AddChannelRequest with mode + channel fields.
+# Auth: AdminAuth (Bearer token). See docs/capability-audit.md for full Channel struct.
 curl -X POST https://your-domain/api/channel/ \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "bifrost-premium",
-    "type": 1,
-    "base_url": "http://bifrost:8080",
-    "key": "sk-placeholder",
-    "models": "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini",
-    "model_mapping": "{\"claude-sonnet\":\"claude-sonnet-4-20250514\",\"claude-opus\":\"claude-opus-4-20250514\",\"claude-haiku\":\"claude-haiku-4-5-20251001\",\"gpt-4o\":\"gpt-4o\",\"gpt-4o-mini\":\"gpt-4o-mini\"}",
-    "priority": 0,
-    "weight": 1,
-    "status": 1
+    "mode": "single",
+    "channel": {
+      "name": "bifrost-premium",
+      "type": 1,
+      "base_url": "http://bifrost:8080",
+      "key": "sk-placeholder",
+      "models": "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini",
+      "model_mapping": "{\"claude-sonnet\":\"claude-sonnet-4-20250514\",\"claude-opus\":\"claude-opus-4-20250514\",\"claude-haiku\":\"claude-haiku-4-5-20251001\",\"gpt-4o\":\"gpt-4o\",\"gpt-4o-mini\":\"gpt-4o-mini\"}",
+      "priority": 0,
+      "weight": 1,
+      "status": 1
+    }
   }'
 ```
+
+_Corrected 2026-03-21: verified against controller/channel.go:566 AddChannelRequest struct._

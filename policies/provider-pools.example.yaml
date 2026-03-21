@@ -51,12 +51,15 @@ pools:
       #   enabled: true
 
     health_check:
-      # PSEUDOCONFIG: Health check approach depends on Bifrost version.
-      # Bifrost may support built-in health monitoring per provider.
-      # If not, use the control plane smoke tests (scripts/smoke/).
+      # Bifrost handles provider health internally via circuit breaker and
+      # response status code tracking. There are no per-provider health check
+      # config fields in the ProviderResponse struct (verified: providers.go:62-76).
+      # These fields are control-plane-only policy metadata used by the dashboard
+      # poller and smoke tests -- they are NOT sent to Bifrost.
+      # See docs/capability-audit.md for verified Bifrost struct definitions.
       method: passive           # Monitor error rates from real traffic
-      failure_threshold: 5      # Mark unhealthy after N consecutive failures
-      recovery_period_seconds: 60  # Wait before retrying unhealthy provider
+      failure_threshold: 5      # Control-plane alert threshold (not sent to Bifrost)
+      recovery_period_seconds: 60  # Control-plane recovery window
       alert_on_unhealthy: true
 
   # ────────────────────────────────────────────────────────────

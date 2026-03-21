@@ -40,7 +40,7 @@ Bifrost reads its configuration from `config.json` (mounted into the container).
    docker-compose restart bifrost
    ```
 
-**PSEUDOCONFIG WARNING:** The generated Bifrost JSON is a best-effort template. Verify field names against the actual Bifrost schema in `bifrost/transports/bifrost-http/config.example.json` before importing.
+**Note:** The generated Bifrost JSON uses verified field names from the Phase 1 capability audit. See `docs/capability-audit.md` for authoritative struct definitions. The script currently outputs providers as an array; Bifrost expects an object keyed by provider name -- the Phase 3 Go replacement will produce the correct format.
 
 ## Step 3: Sync New-API Channels
 
@@ -65,13 +65,16 @@ Option B -- Manual via Admin UI:
 
 ## Step 4: Set Model Pricing in New-API
 
-This step is always manual (no admin API endpoint for bulk pricing).
+Model pricing can be set via the admin API: `PUT /api/option/` with `key=ModelRatio` (RootAuth required). The value is a JSON-encoded string mapping model names to ratios. See `docs/capability-audit.md` -- System Options section for all pricing keys (ModelRatio, ModelPrice, CompletionRatio, CacheRatio, etc.).
 
-1. Go to New-API Admin UI -> Settings -> Operation -> Model Pricing
-2. For each logical model, set the token price matching your cost structure
-3. Premium models should reflect actual provider costs
-4. Standard models can be priced lower (ClewdR fallback reduces cost)
-5. Risky/lab models can be priced at zero or minimal
+Manual alternative: New-API Admin UI -> Settings -> Operation -> Model Pricing.
+
+Pricing guidelines:
+1. Premium models should reflect actual provider costs
+2. Standard models can be priced lower (ClewdR fallback reduces cost)
+3. Risky/lab models can be priced at zero or minimal
+
+_Corrected 2026-03-21: PUT /api/option/ verified in controller/option.go:105._
 
 ## Step 5: Configure ClewdR Instances
 

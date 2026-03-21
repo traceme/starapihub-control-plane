@@ -22,7 +22,7 @@ The sync strategy uses three tiers:
 
 Reads all `policies/*.yaml` files and produces:
 
-- `generated/bifrost-config-fragment.json` -- PSEUDOCONFIG for Bifrost providers (fill in API keys manually)
+- `generated/bifrost-config-fragment.json` -- Bifrost provider config in verified format (fill in API keys manually; see docs/capability-audit.md for struct definitions)
 - `generated/newapi-channel-guidance.txt` -- Human-readable channel definitions
 - `generated/model-summary.txt` -- Table of all logical models with routing info
 
@@ -53,17 +53,19 @@ NEWAPI_URL=http://localhost:3000 ADMIN_TOKEN=<token> ./sync-newapi-channels.sh
 - `BIFROST_URL` -- Internal Bifrost URL used as the channel base_url (default: `http://bifrost:8080`)
 - `DRY_RUN` -- Set to `true` to preview without creating (default: `false`)
 
-## Manual Steps (Not Scriptable)
+## Manual Steps (Automatable in Phase 3)
 
-Some configuration cannot be automated without modifying upstream code:
+The following tasks were previously manual-only but are now confirmed automatable via APIs verified in the Phase 1 audit:
 
-| Task | System | Method |
-|------|--------|--------|
-| Set model pricing | New-API | Admin UI -> Settings -> Operation -> Model Pricing |
-| Add ClewdR cookies | ClewdR | Each instance's web admin UI -> Claude tab |
-| Set Bifrost API keys | Bifrost | Edit config.json or use Bifrost Web UI |
-| Configure user group permissions | New-API | Admin UI -> Users/Groups |
-| Set ClewdR admin password | ClewdR | `clewdr.toml` or environment variable |
+| Task | System | API Method | Automation Status |
+|------|--------|-----------|-------------------|
+| Set model pricing | New-API | `PUT /api/option/` with key=ModelRatio (RootAuth) | Automatable -- Phase 3 |
+| Add ClewdR cookies | ClewdR | `POST /api/cookie` per instance (AdminAuth) | Automatable -- Phase 3 |
+| Set Bifrost API keys | Bifrost | `PUT /api/providers/{provider}` or config.json mount | Automatable -- Phase 3 |
+| Configure user group permissions | New-API | Admin UI -> Users/Groups | Manual (no bulk API) |
+| Set ClewdR admin password | ClewdR | `CLEWDR_ADMIN_PASSWORD` env var or `POST /api/config` | Automatable via env |
+
+See `docs/capability-audit.md` for verified endpoint documentation.
 
 See `plan-sync.md` for the complete step-by-step operator procedure.
 

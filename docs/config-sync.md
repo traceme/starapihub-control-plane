@@ -11,6 +11,8 @@ The control plane generates configuration that must be loaded into upstream syst
 
 The control plane is never on the request hot path. Config sync is an operator-driven activity that happens at deploy time, after policy changes, or during maintenance windows.
 
+_For authoritative API shapes and struct definitions, see `docs/capability-audit.md`._
+
 ## Sync Matrix
 
 | Config Target | Sync Method | Automation Level | Script |
@@ -20,9 +22,9 @@ The control plane is never on the request hot path. Config sync is an operator-d
 | Bifrost providers (ClewdR) | Bifrost Web UI or config.json | Semi-automated | `scripts/sync/generate-config.sh` |
 | New-API channels | Admin API `POST /api/channel/` | Fully automatable | `scripts/sync/sync-newapi-channels.sh` |
 | New-API model mapping | Admin API (part of channel config) | Fully automatable | `scripts/sync/sync-newapi-channels.sh` |
-| New-API model pricing | Admin UI -> Settings -> Model Pricing | Manual | None (UI only) |
+| New-API model pricing | Admin API `PUT /api/option/` with key=ModelRatio | Fully automatable | Phase 3 sync engine (see capability-audit.md -- System Options) |
 | New-API model visibility | Admin API (channel group assignment) | Partially automatable | `scripts/sync/sync-newapi-channels.sh` |
-| ClewdR cookies | ClewdR Admin UI per instance | Manual | None (cookie paste) |
+| ClewdR cookies | ClewdR Admin API `POST /api/cookie` per instance | Fully automatable | Phase 3 sync engine (see capability-audit.md -- Cookie Management) |
 | ClewdR config options | ClewdR Admin API or env vars | Semi-automated | Environment files |
 | Nginx config | File mount | Fully automated | Template in `config/nginx/` |
 | TLS certificates | File mount or cert-manager | Automated | External tooling |
@@ -41,10 +43,10 @@ Step  Action                          Method              Reference
 3     Review nginx config             Manual review       config/nginx/nginx.conf
 4     Start the stack                 docker-compose up   deploy/docker-compose.yml
 5     Wait for health (30-60s)        docker-compose ps   —
-6     Create New-API admin account    Admin UI            https://your-domain/ (first user = admin)
+6     Create New-API admin account    API POST /api/setup  See capability-audit.md -- setup.go PostSetup
 7     Sync New-API channels           Script or manual    scripts/sync/sync-newapi-channels.sh
-8     Set model pricing               Admin UI            New-API -> Settings -> Model Pricing
-9     Configure ClewdR cookies        Admin UI x N        Port-forward to each ClewdR instance
+8     Set model pricing               API PUT /api/option/ key=ModelRatio (see capability-audit.md)
+9     Configure ClewdR cookies        API POST /api/cookie per instance (see capability-audit.md)
 10    Run smoke tests                 Script              scripts/smoke/run-all.sh
 ```
 
@@ -166,9 +168,9 @@ The generated file can be mounted into the Bifrost container at `/app/data/confi
 | **Generated** | Output of a script, can be re-generated any time | Rebuild from registries | `config/bifrost/config.json` |
 | **Template** | Starting point, requires manual customization | Copy and edit once | `deploy/env/*.env.example` |
 | **Manual** | Must be configured through a UI by hand | Operator action each time | ClewdR cookies, New-API model pricing |
-| **Pseudoconfig** | Based on source code inspection, may need verification | Verify against upstream docs | ClewdR-as-provider entries in Bifrost |
+| **Verified** | Source-code-verified config with struct definitions | Confirmed in Phase 1 audit | All Bifrost provider, governance, and ClewdR entries |
 
-Always check the **PSEUDOCONFIG** label in config files — these sections are based on source code analysis but may not exactly match runtime behavior in all upstream versions.
+_All PSEUDOCONFIG labels in this repository were resolved in the Phase 1 capability audit. See capability-audit.md for full API documentation with verified struct definitions and JSON field names._
 
 ## Config Drift Detection
 
@@ -176,7 +178,7 @@ Over time, manual changes in upstream UIs can cause drift between the registries
 
 1. **New-API channels**: Run `sync-newapi-channels.sh --dry-run` and check if it proposes changes. If it does, either the registry or the running config has drifted.
 2. **Bifrost config**: Run `generate-config.sh` and diff the output against the mounted `config.json` or export from Bifrost Web UI.
-3. **ClewdR**: No automated drift detection — cookie status must be checked manually in each instance's admin UI.
+3. **ClewdR**: Use `GET /api/cookies` per instance to check cookie health programmatically (see capability-audit.md -- Cookie Management).
 
 Schedule a monthly drift check as part of the operational routine (see `docs/runbook.md`).
 

@@ -32,18 +32,19 @@ ClewdR auto-generates `clewdr.toml` on first run in its data directory. The file
 stores all persistent config including cookies. Key sections:
 
 ```toml
-# PSEUDOCONFIG: Verify field names against your ClewdR version.
-# Reference: clewdr/src/config/clewdr_config.rs
+# Verified field names from clewdr/src/config/clewdr_config.rs.
+# See docs/capability-audit.md -- ClewdR Automation Surfaces for full API reference.
+# ClewdR config is also manageable via GET/POST /api/config endpoints.
 
 # Server settings (require restart)
 ip = "0.0.0.0"
 port = 8484
 
 # Authentication
-password = "auto-generated-64-char-string"        # API key for inference
-admin_password = "auto-generated-64-char-string"   # Web UI login
+password = "auto-generated-64-char-string"        # API key for inference (Bearer token)
+admin_password = "auto-generated-64-char-string"   # Admin API and Web UI login
 
-# Cookie behavior (hot-reloadable — changes apply without restart)
+# Cookie behavior (hot-reloadable -- changes apply without restart)
 skip_rate_limit = true      # Skip cookies in cooldown, try next
 skip_restricted = false     # Skip cookies with restriction warnings
 skip_non_pro = false        # Only use Pro account cookies
@@ -57,10 +58,12 @@ use_real_roles = true       # Use user/assistant role names
 # Network (hot-reloadable)
 # proxy = "socks5://proxy-host:1080"    # Outbound proxy
 
-# Cookies are stored as an array in cookie_array.
-# Managed via the admin web UI — do not edit manually.
+# Cookies are managed programmatically via POST /api/cookie endpoint.
+# See docs/capability-audit.md -- Cookie Management section.
 # cookie_array = [...]
 ```
+
+_Corrected 2026-03-21: verified against clewdr/src/config/clewdr_config.rs and clewdr/src/router.rs._
 
 Environment variables (with `CLEWDR_` prefix) override clewdr.toml values.
 See `deploy/env/clewdr-1.env.example` for the full env var reference.

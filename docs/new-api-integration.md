@@ -48,26 +48,32 @@ New-API channels are created through the admin UI at `https://your-domain/`. The
 
 ```bash
 # New-API admin API for channel management
-# Endpoint: POST /api/channel/
-# Auth: Admin session cookie or token
+# Endpoint: POST /api/channel/ (uses AddChannelRequest wrapper)
+# Auth: AdminAuth (session cookie or Authorization: Bearer <admin-token>)
 # Full CRUD: GET/POST/PUT/DELETE /api/channel/
+# Verified: controller/channel.go AddChannel handler, see capability-audit.md
 
 curl -X POST https://your-domain/api/channel/ \
   -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "bifrost-premium",
-    "type": 1,
-    "base_url": "http://bifrost:8080",
-    "key": "",
-    "models": "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini",
-    "model_mapping": "{\"claude-sonnet\":\"claude-sonnet-4-20250514\",\"claude-opus\":\"claude-opus-4-20250514\"}",
-    "priority": 0,
-    "weight": 1,
-    "group": "default",
-    "status": 1
+    "mode": "single",
+    "channel": {
+      "name": "bifrost-premium",
+      "type": 1,
+      "base_url": "http://bifrost:8080",
+      "key": "sk-placeholder",
+      "models": "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini",
+      "model_mapping": "{\"claude-sonnet\":\"claude-sonnet-4-20250514\",\"claude-opus\":\"claude-opus-4-20250514\"}",
+      "priority": 0,
+      "weight": 1,
+      "group": "default",
+      "status": 1
+    }
   }'
 ```
+
+_Corrected 2026-03-21: POST /api/channel/ uses AddChannelRequest struct with `mode` and `channel` fields (verified: controller/channel.go:566). See capability-audit.md._
 
 **Channel model fields** (defined in `new-api/model/channel.go`):
 
@@ -117,7 +123,7 @@ This mapping should be consistent with `policies/logical-models.example.yaml`.
 
 ### Billing Configuration
 
-Token pricing is set per-model in New-API. Recommended pricing tiers:
+Token pricing is set per-model in New-API via the admin API. Recommended pricing tiers:
 
 | Channel | Pricing Strategy |
 |---------|-----------------|
@@ -125,7 +131,9 @@ Token pricing is set per-model in New-API. Recommended pricing tiers:
 | `bifrost-standard` | 70% of market rate (reflects potential unofficial fallback) |
 | `bifrost-risky` | 30% of market rate (primarily uses unofficial providers) |
 
-Set model prices in New-API admin UI: Settings → Operation → Model Pricing.
+Set model prices via `PUT /api/option/` with `key=ModelRatio` and a JSON-encoded map as the value. The endpoint accepts RootAuth. See `docs/capability-audit.md` -- System Options section for the full list of pricing-relevant option keys (ModelRatio, ModelPrice, CompletionRatio, CacheRatio, etc.).
+
+_Corrected 2026-03-21: PUT /api/option/ verified in controller/option.go:105. See capability-audit.md for full API documentation._
 
 ### What Stays in New-API
 
@@ -148,3 +156,7 @@ Set model prices in New-API admin UI: Settings → Operation → Model Pricing.
 See `config/new-api/` for:
 - `channels.example.md` — Channel configuration reference
 - `model-mapping.example.md` — Model name mapping reference
+
+For authoritative API shapes (channel struct, option struct, auth levels), see `docs/capability-audit.md` -- New-API Admin API section.
+
+_Corrected 2026-03-21: All endpoint paths, request shapes, and auth levels verified against new-api source code. See capability-audit.md for full documentation._
