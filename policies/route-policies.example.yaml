@@ -1,0 +1,119 @@
+# Route Policy Registry
+#
+# Defines how requests should be routed through Bifrost based on
+# the traffic tier. Each policy maps to one or more provider pools
+# (defined in provider-pools.example.yaml) with explicit fallback order.
+#
+# These policies are the control plane's routing truth.
+# They must be translated into Bifrost config:
+#   - routing_rules (CEL expressions matching models to providers)
+#   - model_configs (per-model timeout and retry settings)
+# See docs/bifrost-integration.md for translation guidance.
+#
+# Pool references must match pool IDs in provider-pools.example.yaml.
+
+policies:
+
+  # ────────────────────────────────────────────────────────────
+  # PREMIUM — Official providers only, no ClewdR under any circumstance
+  # ────────────────────────────────────────────────────────────
+  premium:
+    description: "Official API providers only. No unofficial endpoints. SLA-backed."
+    pool_chain:
+      - official-anthropic    # Primary: Direct Anthropic API
+      - official-openai       # Fallback for OpenAI-specific models
+    fallback_behavior: fail   # Do NOT fall back to unofficial — return error to client
+    max_retries: 2            # Per-provider retry attempts
+    timeout_seconds: 60       # Per-request timeout (covers full provider round-trip)
+    caching_allowed: true     # Bifrost semantic cache may serve repeat queries
+    unofficial_allowed: false # ClewdR is explicitly prohibited for this policy
+    use_cases:
+      - Paying customer production traffic
+      - Compliance-sensitive workloads
+      - SLA-backed API access
+    notes: >
+      If both official pools are exhausted, the request fails with an error.
+      This is intentional — premium customers should never silently receive
+      responses from unofficial providers.
+
+  # ────────────────────────────────────────────────────────────
+  # STANDARD — Official preferred, ClewdR as degraded last resort
+  # ────────────────────────────────────────────────────────────
+  standard:
+    description: "Official providers preferred. ClewdR as last-resort fallback only."
+    pool_chain:
+      - official-anthropic    # Try official first
+      - official-openai       # Then OpenAI (for OpenAI-specific models)
+      - unofficial-clewdr     # Last resort: ClewdR (only if all official fail)
+    fallback_behavior: degrade  # Fall to next pool in chain on failure
+    max_retries: 2
+    timeout_seconds: 60
+    caching_allowed: true
+    unofficial_allowed: true    # But only as last resort in the chain
+    use_cases:
+      - Internal tools and dashboards
+      - Cost-optimized batch workloads
+      - Non-critical traffic where occasional ClewdR responses are acceptable
+    notes: >
+      The pool_chain order guarantees official providers are always tried first.
+      ClewdR is only reached if Anthropic AND OpenAI both fail (e.g., rate limit,
+      outage). Clients should be aware that response quality may degrade.
+
+  # ────────────────────────────────────────────────────────────
+  # RISKY — ClewdR primary, official as backup
+  # ────────────────────────────────────────────────────────────
+  risky:
+    description: "ClewdR primary, official API as backup. No SLA guarantee."
+    pool_chain:
+      - unofficial-clewdr     # Try ClewdR first (cheapest / free)
+      - official-anthropic    # Fall back to official if ClewdR is down
+    fallback_behavior: degrade
+    max_retries: 1            # Fewer retries — fail fast and try next pool
+    timeout_seconds: 120      # ClewdR can be slower than official APIs
+    caching_allowed: false    # Do not cache unofficial responses
+    unofficial_allowed: true
+    use_cases:
+      - Lab experiments and research
+      - Developer testing and prototyping
+      - Cost exploration (minimize API spend)
+    notes: >
+      ClewdR is tried first because it has zero API cost. If all ClewdR
+      instances are unavailable (cookies expired, rate limited), the request
+      falls back to the official Anthropic API. This fallback is a safety net,
+      not the primary path.
+
+  # ────────────────────────────────────────────────────────────
+  # DIRECT-OPENAI — Single provider, no fallback chain
+  # ────────────────────────────────────────────────────────────
+  direct-openai:
+    description: "Direct to OpenAI. No fallback. For OpenAI-exclusive features."
+    pool_chain:
+      - official-openai       # Only pool — no alternatives
+    fallback_behavior: fail   # No fallback available
+    max_retries: 2
+    timeout_seconds: 30       # OpenAI is typically fast
+    caching_allowed: true
+    unofficial_allowed: false
+    use_cases:
+      - DALL-E image generation
+      - Whisper transcription
+      - OpenAI-specific features not available elsewhere
+    notes: >
+      Use this policy for models that only exist on OpenAI. There is no
+      Anthropic or ClewdR fallback because the models are OpenAI-exclusive.
+
+  # ────────────────────────────────────────────────────────────
+  # DIRECT-ANTHROPIC — Single provider, no fallback chain
+  # ────────────────────────────────────────────────────────────
+  direct-anthropic:
+    description: "Direct to Anthropic. No fallback. For Anthropic-exclusive features."
+    pool_chain:
+      - official-anthropic
+    fallback_behavior: fail
+    max_retries: 2
+    timeout_seconds: 60
+    caching_allowed: true
+    unofficial_allowed: false
+    use_cases:
+      - Anthropic-specific features (extended thinking, tool use with Claude)
+      - When OpenAI fallback is explicitly undesirable

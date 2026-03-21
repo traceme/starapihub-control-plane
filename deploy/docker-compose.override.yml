@@ -1,0 +1,53 @@
+# Local development overrides
+# This file is automatically loaded by docker compose alongside docker-compose.yml.
+# It switches nginx to HTTP-only, builds ClewdR from source, and exposes debug ports.
+
+services:
+  nginx:
+    volumes:
+      - ../config/nginx/nginx.local-dev.conf:/etc/nginx/nginx.conf:ro
+      - ../config/nginx/conf.d:/etc/nginx/conf.d:ro
+    ports:
+      - "80:80"
+
+  # Expose New-API admin UI directly for setup
+  new-api:
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # Expose Bifrost UI for provider config
+  bifrost:
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  # Build ClewdR from local source (no public Docker image available)
+  # The Dockerfile uses /etc/clewdr as data dir, override volume mount accordingly
+  clewdr-1:
+    build:
+      context: ../../clewdr
+      dockerfile: Dockerfile
+    image: clewdr:local
+    volumes:
+      - clewdr-1-data:/etc/clewdr
+    ports:
+      - "127.0.0.1:18484:8484"
+
+  clewdr-2:
+    build:
+      context: ../../clewdr
+      dockerfile: Dockerfile
+    image: clewdr:local
+    volumes:
+      - clewdr-2-data:/etc/clewdr
+    ports:
+      - "127.0.0.1:18485:8484"
+
+  clewdr-3:
+    build:
+      context: ../../clewdr
+      dockerfile: Dockerfile
+    image: clewdr:local
+    volumes:
+      - clewdr-3-data:/etc/clewdr
+    ports:
+      - "127.0.0.1:18486:8484"

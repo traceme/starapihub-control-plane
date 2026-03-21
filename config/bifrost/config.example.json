@@ -1,0 +1,120 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "_comment": [
+    "PSEUDOCONFIG: Bifrost config.json template for the control plane deployment.",
+    "Place in Bifrost's app data directory (/app/data/config.json) or configure via Bifrost Web UI.",
+    "The canonical schema is bifrost/transports/config.schema.json (~2700 lines).",
+    "Secrets use env.VAR_NAME syntax to reference environment variables from bifrost.env.",
+    "Fields marked PSEUDOCONFIG may need adjustment based on your Bifrost version."
+  ],
+
+  "providers": {
+    "anthropic": {
+      "keys": [
+        {
+          "id": "anthropic-key-1",
+          "name": "Primary Anthropic API Key",
+          "value": "env.ANTHROPIC_API_KEY",
+          "models": [
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-20250514",
+            "claude-haiku-4-5-20251001"
+          ],
+          "weight": 1.0,
+          "enabled": true
+        }
+      ],
+      "network_config": {
+        "default_request_timeout_in_seconds": 60,
+        "max_retries": 2,
+        "retry_backoff_initial": 500,
+        "retry_backoff_max": 5000
+      }
+    },
+
+    "openai": {
+      "keys": [
+        {
+          "id": "openai-key-1",
+          "name": "Primary OpenAI API Key",
+          "value": "env.OPENAI_API_KEY",
+          "models": [
+            "gpt-4o",
+            "gpt-4o-mini"
+          ],
+          "weight": 1.0,
+          "enabled": true
+        }
+      ],
+      "network_config": {
+        "default_request_timeout_in_seconds": 30,
+        "max_retries": 2,
+        "retry_backoff_initial": 500,
+        "retry_backoff_max": 5000
+      }
+    }
+  },
+
+  "_clewdr_integration_notes": [
+    "ClewdR instances expose OpenAI-compatible endpoints at /v1/chat/completions.",
+    "To register ClewdR as providers in Bifrost, you have two options:",
+    "",
+    "OPTION A — Custom providers via Bifrost Web UI (recommended):",
+    "  1. Open Bifrost Web UI (port-forward if needed)",
+    "  2. Go to Providers -> Add Custom Provider",
+    "  3. For each ClewdR instance:",
+    "     - Name: clewdr-1 (or clewdr-2, clewdr-3)",
+    "     - Base Provider: openai (ClewdR is OpenAI-compatible)",
+    "     - Base URL: http://clewdr-1:8484 (Docker DNS resolves this)",
+    "     - API Key: the CLEWDR_PASSWORD from that instance's env",
+    "     - Models: claude-sonnet-4-20250514, claude-opus-4-20250514",
+    "",
+    "OPTION B — Routing rules with CEL expressions (advanced):",
+    "  Use governance.routing_rules to direct specific models to ClewdR.",
+    "  See the routing_rules section below for an example.",
+    "",
+    "Each ClewdR instance uses a different base_url because each has its",
+    "own cookie/account. Bifrost sees them as separate custom providers",
+    "and can round-robin or weight-distribute across them."
+  ],
+
+  "governance": {
+    "virtual_keys": [],
+    "routing_rules": [
+      {
+        "_comment": "PSEUDOCONFIG: Example routing rule for lab traffic to ClewdR.",
+        "_note": "Verify CEL expression syntax against your Bifrost version.",
+        "_example_only": true,
+        "id": "rule-lab-to-clewdr",
+        "name": "Route lab models to ClewdR pool",
+        "enabled": true,
+        "cel_expression": "model.startsWith('lab-')",
+        "targets": [
+          { "provider": "clewdr-1", "weight": 0.34 },
+          { "provider": "clewdr-2", "weight": 0.33 },
+          { "provider": "clewdr-3", "weight": 0.33 }
+        ],
+        "fallbacks": ["anthropic"],
+        "scope": "global",
+        "priority": 10
+      }
+    ],
+    "model_configs": [],
+    "auth_config": {
+      "is_enabled": false,
+      "_note": "When false, any request on the internal core-net is accepted without auth. Set to true for defense-in-depth. New-API channels would then need valid credentials.",
+      "admin_username": { "env": "BIFROST_ADMIN_USER" },
+      "admin_password": { "env": "BIFROST_ADMIN_PASS" }
+    }
+  },
+
+  "client_config": {
+    "drop_excess_requests": false,
+    "initial_pool_size": 5000,
+    "enable_logging": true,
+    "disable_content_logging": false,
+    "log_retention_days": 30,
+    "enforce_auth_on_inference": false,
+    "allow_direct_keys": true
+  }
+}

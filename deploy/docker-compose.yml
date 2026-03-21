@@ -1,0 +1,282 @@
+# External Control Plane — Full Stack Docker Compose
+#
+# Brings up: Nginx (public ingress) + New-API + Bifrost + ClewdR instances + Postgres + Redis
+#
+# Usage:
+#   1. Copy deploy/env/*.env.example to deploy/env/*.env and customize
+#   2. Review config/nginx/nginx.conf — set your domain name
+#   3. Place TLS certificates in the certs/ directory (see README.md)
+#   4. Run: docker compose --env-file env/common.env up -d
+#   5. (Optional) Include ClewdR: docker compose --env-file env/common.env --profile clewdr up -d
+#   6. Follow docs/config-sync.md to configure channels and providers
+#
+# IMPORTANT: This compose file does NOT modify any upstream source code.
+# All upstream services use their official images with external config.
+#
+# Network zones:
+#   public-net   — Nginx only. Internet-facing.
+#   core-net     — New-API, Bifrost, Postgres, Redis. No inbound from internet.
+#   provider-net — Bifrost, ClewdR instances. Outbound to Claude.ai / APIs.
+#
+# Only nginx has published ports. All other services communicate
+# exclusively through Docker internal DNS on their shared networks.
+
+services:
+
+  # ============================================================
+  # PUBLIC ZONE — Internet-facing
+  # ============================================================
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: cp-nginx
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_HTTPS_PORT:-443}:443"
+      - "${PUBLIC_HTTP_PORT:-80}:80"
+    volumes:
+      - ../config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../config/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+    networks:
+      - public-net
+    depends_on:
+      new-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================
+  # CORE ZONE — Internal, not internet-facing
+  # New-API is the gateway between public-net and core-net.
+  # ============================================================
+
+  new-api:
+    image: calciumion/new-api:${NEWAPI_VERSION:-latest}
+    container_name: cp-new-api
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    # NOT exposed to host — only reachable through nginx on public-net
+    # Uncomment below for direct access during development:
+    # ports:
+    #   - "127.0.0.1:3000:3000"
+    volumes:
+      - newapi-data:/data
+      - newapi-logs:/app/logs
+    env_file:
+      - env/new-api.env
+    networks:
+      - public-net    # Accepts traffic from nginx
+      - core-net      # Reaches Bifrost, Postgres, Redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -q 'success' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  bifrost:
+    image: maximhq/bifrost:${BIFROST_VERSION:-latest}
+    container_name: cp-bifrost
+    restart: unless-stopped
+    # NOT exposed to host — only reachable from New-API on core-net
+    # Uncomment below for direct access during development:
+    # ports:
+    #   - "127.0.0.1:8080:8080"
+    volumes:
+      - bifrost-data:/app/data
+      # Mount generated config if using file-based config:
+      # - ../config/bifrost/config.json:/app/data/config.json:ro
+    env_file:
+      - env/bifrost.env
+    networks:
+      - core-net      # Accepts traffic from New-API
+      - provider-net  # Reaches ClewdR instances and official APIs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ============================================================
+  # PROVIDER ZONE — Internal only, isolated from public ingress
+  # Each ClewdR instance uses a dedicated cookie/account.
+  # ============================================================
+
+  clewdr-1:
+    image: ${CLEWDR_IMAGE:-clewdr:local}
+    container_name: cp-clewdr-1
+    restart: unless-stopped
+    profiles:
+      - clewdr
+    # NOT exposed to host — only reachable from Bifrost on provider-net
+    # For initial setup, use: docker compose port clewdr-1 8484
+    # or SSH tunnel: ssh -L 18484:localhost:18484 your-server
+    # (after temporarily uncommenting the ports line below)
+    # ports:
+    #   - "127.0.0.1:18484:8484"
+    volumes:
+      - clewdr-1-data:/app/data
+    env_file:
+      - env/clewdr-1.env
+    networks:
+      - provider-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo -e 'GET / HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' | timeout 2 bash -c 'cat > /dev/tcp/localhost/8484' 2>/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  clewdr-2:
+    image: ${CLEWDR_IMAGE:-clewdr:local}
+    container_name: cp-clewdr-2
+    restart: unless-stopped
+    profiles:
+      - clewdr
+    # ports:
+    #   - "127.0.0.1:18485:8484"
+    volumes:
+      - clewdr-2-data:/app/data
+    env_file:
+      - env/clewdr-2.env
+    networks:
+      - provider-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo -e 'GET / HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' | timeout 2 bash -c 'cat > /dev/tcp/localhost/8484' 2>/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  clewdr-3:
+    image: ${CLEWDR_IMAGE:-clewdr:local}
+    container_name: cp-clewdr-3
+    restart: unless-stopped
+    profiles:
+      - clewdr
+    # ports:
+    #   - "127.0.0.1:18486:8484"
+    volumes:
+      - clewdr-3-data:/app/data
+    env_file:
+      - env/clewdr-3.env
+    networks:
+      - provider-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo -e 'GET / HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' | timeout 2 bash -c 'cat > /dev/tcp/localhost/8484' 2>/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================================
+  # DATA STORES — Core zone only
+  # ============================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newapi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in env/common.env}
+      POSTGRES_DB: ${POSTGRES_DB:-newapi}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - core-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-newapi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: cp-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - core-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# ============================================================
+# NETWORKS — Zone isolation
+# ============================================================
+#
+#   public-net:   Nginx <-> New-API. Internet-reachable (nginx publishes ports).
+#   core-net:     New-API <-> Bifrost <-> Postgres <-> Redis.
+#                 Not directly internet-facing, but containers CAN make
+#                 outbound requests (New-API needs this for OAuth, etc.).
+#   provider-net: Bifrost <-> ClewdR instances. Outbound internet required
+#                 for ClewdR to reach Claude.ai and Bifrost to reach
+#                 official provider APIs (Anthropic, OpenAI, etc.).
+
+networks:
+  public-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+  core-net:
+    driver: bridge
+    # NOT marked internal — New-API needs outbound for OAuth providers,
+    # webhooks, and update checks. Bifrost needs outbound for provider APIs.
+    # Inbound protection is handled by not publishing any ports.
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
+
+  provider-net:
+    driver: bridge
+    # NOT internal — ClewdR needs outbound internet to reach Claude.ai.
+    # Bifrost needs outbound to reach official APIs via this network.
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
+
+# ============================================================
+# VOLUMES — Persistent data
+# ============================================================
+
+volumes:
+  newapi-data:
+    name: cp-newapi-data
+  newapi-logs:
+    name: cp-newapi-logs
+  bifrost-data:
+    name: cp-bifrost-data
+  clewdr-1-data:
+    name: cp-clewdr-1-data
+  clewdr-2-data:
+    name: cp-clewdr-2-data
+  clewdr-3-data:
+    name: cp-clewdr-3-data
+  pg-data:
+    name: cp-pg-data
+  redis-data:
+    name: cp-redis-data

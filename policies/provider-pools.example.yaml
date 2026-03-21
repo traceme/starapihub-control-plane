@@ -1,0 +1,202 @@
+# Provider Pool Registry
+#
+# Defines groups of providers that Bifrost can route to. Each pool
+# contains one or more provider endpoints with connection details
+# and load-balancing configuration.
+#
+# This registry maps to Bifrost's provider configuration in config.json.
+# See config/bifrost/config.example.json for the Bifrost-native format
+# and docs/bifrost-integration.md for translation guidance.
+#
+# Pool IDs are referenced by route-policies.example.yaml in pool_chain fields.
+#
+# Secret placement:
+#   - Official API keys: stored in Bifrost config.json or env vars (bifrost.env)
+#   - ClewdR passwords: stored in each ClewdR instance's env (clewdr-N.env)
+#   - Secrets are NEVER stored in this file — only referenced by env var name.
+
+pools:
+
+  # ────────────────────────────────────────────────────────────
+  # OFFICIAL ANTHROPIC — Direct API access
+  # ────────────────────────────────────────────────────────────
+  official-anthropic:
+    description: "Direct Anthropic API access via official API keys"
+    trust_level: high
+    providers:
+      - id: anthropic-primary
+        type: anthropic         # Bifrost ModelProvider enum value
+        base_url: ""            # Default: https://api.anthropic.com
+        key_env: ANTHROPIC_API_KEY  # Referenced in bifrost.env
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+          - claude-haiku-4-5-20251001
+        weight: 1.0
+        enabled: true
+        network_config:
+          max_retries: 2
+          default_request_timeout_in_seconds: 60
+          retry_backoff_initial: 500    # milliseconds
+          retry_backoff_max: 5000       # milliseconds
+
+      # Optional: Add a second Anthropic key for higher throughput
+      # - id: anthropic-secondary
+      #   type: anthropic
+      #   key_env: ANTHROPIC_API_KEY_2
+      #   models:
+      #     - claude-sonnet-4-20250514
+      #     - claude-haiku-4-5-20251001
+      #   weight: 1.0
+      #   enabled: true
+
+    health_check:
+      # PSEUDOCONFIG: Health check approach depends on Bifrost version.
+      # Bifrost may support built-in health monitoring per provider.
+      # If not, use the control plane smoke tests (scripts/smoke/).
+      method: passive           # Monitor error rates from real traffic
+      failure_threshold: 5      # Mark unhealthy after N consecutive failures
+      recovery_period_seconds: 60  # Wait before retrying unhealthy provider
+      alert_on_unhealthy: true
+
+  # ────────────────────────────────────────────────────────────
+  # OFFICIAL OPENAI — Direct API access
+  # ────────────────────────────────────────────────────────────
+  official-openai:
+    description: "Direct OpenAI API access via official API keys"
+    trust_level: high
+    providers:
+      - id: openai-primary
+        type: openai            # Bifrost ModelProvider enum value
+        base_url: ""            # Default: https://api.openai.com
+        key_env: OPENAI_API_KEY
+        models:
+          - gpt-4o
+          - gpt-4o-mini
+        weight: 1.0
+        enabled: true
+        network_config:
+          max_retries: 2
+          default_request_timeout_in_seconds: 30
+          retry_backoff_initial: 500
+          retry_backoff_max: 5000
+
+    health_check:
+      method: passive
+      failure_threshold: 5
+      recovery_period_seconds: 60
+      alert_on_unhealthy: true
+
+  # ────────────────────────────────────────────────────────────
+  # OFFICIAL AWS BEDROCK — Alternative Anthropic access (optional)
+  # ────────────────────────────────────────────────────────────
+  official-bedrock:
+    description: "AWS Bedrock for Claude models — alternative to direct Anthropic API"
+    trust_level: high
+    providers:
+      - id: bedrock-us-east-1
+        type: bedrock           # Bifrost ModelProvider enum value
+        base_url: ""            # Determined by AWS region
+        # Auth uses AWS credentials, configured in Bifrost via bedrock_key_config:
+        # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION in bifrost.env
+        models:
+          - anthropic.claude-sonnet-4-20250514-v1:0
+          - anthropic.claude-haiku-4-5-20251001-v1:0
+        weight: 1.0
+        enabled: true
+        network_config:
+          max_retries: 2
+          default_request_timeout_in_seconds: 60
+          retry_backoff_initial: 500
+          retry_backoff_max: 5000
+
+    health_check:
+      method: passive
+      failure_threshold: 5
+      recovery_period_seconds: 60
+      alert_on_unhealthy: true
+
+  # ────────────────────────────────────────────────────────────
+  # UNOFFICIAL CLEWDR — Browser-cookie-based Claude.ai proxy
+  # ────────────────────────────────────────────────────────────
+  #
+  # WARNING:
+  #   - Cookie-based auth may expire without warning
+  #   - Rate limited by Claude.ai's web interface limits
+  #   - Potential terms of service violation
+  #   - No billing SLA — requests are effectively free but unreliable
+  #   - MUST NOT be used for premium traffic without explicit opt-in
+  #
+  unofficial-clewdr:
+    description: "ClewdR instances — unofficial Claude.ai proxy via browser cookies"
+    trust_level: low
+    risk_notes: |
+      ClewdR uses browser cookies from Claude.ai accounts to proxy
+      inference requests. This has several operational risks:
+        1. Cookies can expire at any time (session invalidation, password change)
+        2. Anthropic may rate-limit or ban accounts used this way
+        3. Response quality/format may differ from official API
+        4. No SLA or support — failures are expected and accepted
+        5. Potential ToS violation — operator assumes all legal risk
+    providers:
+      # Each ClewdR instance uses a SEPARATE cookie/account to:
+      #   - Spread load across accounts
+      #   - Reduce per-account rate limiting
+      #   - Provide redundancy (one cookie expiring doesn't take down all)
+      #
+      # In Bifrost, these are registered as custom providers with
+      # base_provider "openai" and custom base_url.
+
+      - id: clewdr-1
+        type: openai            # ClewdR exposes OpenAI-compatible endpoints
+        base_url: "http://clewdr-1:8484"   # Docker internal DNS
+        key_env: CLEWDR_1_PASSWORD          # ClewdR API password from clewdr-1.env
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0             # Equal weight across instances
+        enabled: true
+        network_config:
+          max_retries: 0        # Don't retry on ClewdR — fail fast to next instance/pool
+          default_request_timeout_in_seconds: 120   # ClewdR is slower than official API
+          stream_idle_timeout_in_seconds: 120
+
+      - id: clewdr-2
+        type: openai
+        base_url: "http://clewdr-2:8484"
+        key_env: CLEWDR_2_PASSWORD
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0
+        enabled: true
+        network_config:
+          max_retries: 0
+          default_request_timeout_in_seconds: 120
+          stream_idle_timeout_in_seconds: 120
+
+      - id: clewdr-3
+        type: openai
+        base_url: "http://clewdr-3:8484"
+        key_env: CLEWDR_3_PASSWORD
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0
+        enabled: true
+        network_config:
+          max_retries: 0
+          default_request_timeout_in_seconds: 120
+          stream_idle_timeout_in_seconds: 120
+
+    health_check:
+      # ClewdR health is less reliable than official APIs.
+      # Use aggressive failure detection but cautious recovery.
+      method: passive
+      failure_threshold: 3      # Mark unhealthy faster than official pools
+      recovery_period_seconds: 120  # Longer recovery wait (cookies may need manual fix)
+      alert_on_unhealthy: true
+      notes: >
+        When a ClewdR instance is marked unhealthy, the likely cause is an
+        expired cookie. Check the instance's admin UI and replace the cookie.
+        See config/clewdr/instances.example.md for the cookie rotation procedure.

@@ -1,0 +1,23 @@
+# Environment files with secrets (keep .env.example templates)
+deploy/env/*.env
+!deploy/env/*.env.example
+
+# TLS certificates
+deploy/certs/
+
+# Generated config output
+generated/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs
+*.log
