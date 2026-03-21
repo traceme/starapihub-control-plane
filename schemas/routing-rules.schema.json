@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Routing Rules Registry",
+  "description": "JSON Schema for control-plane/policies/routing-rules.yaml - canonical Bifrost routing rule definitions",
+  "type": "object",
+  "required": ["routing_rules"],
+  "additionalProperties": false,
+  "properties": {
+    "routing_rules": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "enabled", "cel_expression", "scope", "priority"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Explanation of what this rule does"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this rule is active"
+          },
+          "cel_expression": {
+            "type": "string",
+            "description": "CEL expression that matches requests to this rule"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["weight"],
+              "additionalProperties": false,
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "description": "Target provider name (must match a key in providers.yaml)"
+                },
+                "model": {
+                  "type": "string",
+                  "description": "Target model override"
+                },
+                "key_id": {
+                  "type": "string",
+                  "description": "Specific key ID to use"
+                },
+                "weight": {
+                  "type": "number",
+                  "description": "Load balancing weight for this target"
+                }
+              }
+            }
+          },
+          "fallbacks": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Ordered list of fallback provider names"
+          },
+          "query": {
+            "type": "object",
+            "description": "Additional query parameters for rule matching"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["global", "virtual_key", "model"],
+            "description": "Scope at which this rule applies"
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Specific ID within the scope (required for non-global scopes)"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Rule evaluation priority (lower = evaluated first)"
+          }
+        }
+      }
+    }
+  }
+}

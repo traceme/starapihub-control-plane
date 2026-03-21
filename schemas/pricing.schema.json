@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pricing Registry",
+  "description": "JSON Schema for control-plane/policies/pricing.yaml - canonical model pricing definitions",
+  "type": "object",
+  "required": ["pricing"],
+  "additionalProperties": false,
+  "properties": {
+    "pricing": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model_ratio": {
+            "type": "number",
+            "description": "Input token cost multiplier relative to base unit"
+          },
+          "model_price": {
+            "type": "number",
+            "description": "Fixed price per model invocation (alternative to ratio-based pricing)"
+          },
+          "completion_ratio": {
+            "type": "number",
+            "description": "Output token cost multiplier relative to base unit"
+          },
+          "cache_ratio": {
+            "type": "number",
+            "description": "Cache hit cost multiplier relative to base unit"
+          }
+        }
+      }
+    }
+  }
+}

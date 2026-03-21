@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Channels Registry",
+  "description": "JSON Schema for control-plane/policies/channels.yaml - canonical New-API channel definitions",
+  "type": "object",
+  "required": ["channels"],
+  "additionalProperties": false,
+  "properties": {
+    "channels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "type", "models", "group", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable channel name"
+          },
+          "type": {
+            "type": "integer",
+            "description": "New-API channel type ID (e.g., 43 for custom/Bifrost)"
+          },
+          "key_env": {
+            "type": "string",
+            "description": "Environment variable name containing the API key (never the raw key)"
+          },
+          "base_url": {
+            "type": "string",
+            "description": "Base URL for the channel endpoint"
+          },
+          "models": {
+            "type": "string",
+            "description": "Comma-separated list of logical model names this channel serves"
+          },
+          "group": {
+            "type": "string",
+            "description": "Channel group for access control"
+          },
+          "tag": {
+            "type": "string",
+            "description": "Tag for channel categorization"
+          },
+          "model_mapping": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Map of logical model name to upstream model ID"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Channel priority (lower = higher priority)"
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Load balancing weight"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "Channel status: 0 = disabled, 1 = enabled"
+          },
+          "auto_ban": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "Whether to auto-ban on repeated failures: 0 = no, 1 = yes"
+          },
+          "setting": {
+            "type": "string",
+            "description": "JSON-encoded channel-specific settings"
+          },
+          "param_override": {
+            "type": "string",
+            "description": "JSON-encoded parameter overrides"
+          },
+          "header_override": {
+            "type": "string",
+            "description": "JSON-encoded header overrides"
+          }
+        }
+      }
+    }
+  }
+}

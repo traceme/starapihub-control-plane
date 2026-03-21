@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Providers Registry",
+  "description": "JSON Schema for control-plane/policies/providers.yaml - canonical Bifrost provider definitions",
+  "type": "object",
+  "required": ["providers"],
+  "additionalProperties": false,
+  "properties": {
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["keys"],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Human-readable provider description"
+          },
+          "custom_provider_config": {
+            "type": "object",
+            "required": ["is_key_less", "base_provider_type"],
+            "additionalProperties": false,
+            "properties": {
+              "is_key_less": {
+                "type": "boolean",
+                "description": "Whether the provider requires an API key"
+              },
+              "base_provider_type": {
+                "type": "string",
+                "description": "Base provider type for custom providers (e.g., openai)"
+              }
+            }
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "models", "weight"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique key identifier"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Human-readable key name"
+                },
+                "value_env": {
+                  "type": "string",
+                  "description": "Environment variable name containing the API key value"
+                },
+                "models": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "List of upstream model IDs this key can access"
+                },
+                "weight": {
+                  "type": "number",
+                  "description": "Load balancing weight for this key"
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Whether this key is currently active"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Optional description for this key"
+                },
+                "bedrock_key_config": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "aws_access_key_id_env": {
+                      "type": "string",
+                      "description": "Env var for AWS access key ID"
+                    },
+                    "aws_secret_access_key_env": {
+                      "type": "string",
+                      "description": "Env var for AWS secret access key"
+                    },
+                    "aws_region": {
+                      "type": "string",
+                      "description": "AWS region for Bedrock"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "network_config": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string",
+                "description": "Custom base URL for the provider endpoint"
+              },
+              "extra_headers": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "Additional HTTP headers to send with requests"
+              },
+              "default_request_timeout_in_seconds": {
+                "type": "integer",
+                "description": "Per-request timeout in seconds"
+              },
+              "max_retries": {
+                "type": "integer",
+                "description": "Maximum retry attempts per request"
+              },
+              "retry_backoff_initial_ms": {
+                "type": "integer",
+                "description": "Initial retry backoff delay in milliseconds"
+              },
+              "retry_backoff_max_ms": {
+                "type": "integer",
+                "description": "Maximum retry backoff delay in milliseconds"
+              },
+              "stream_idle_timeout_in_seconds": {
+                "type": "integer",
+                "description": "Timeout for idle streaming connections in seconds"
+              }
+            }
+          },
+          "concurrency_and_buffer_size": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "concurrency": {
+                "type": "integer",
+                "description": "Maximum concurrent requests to this provider"
+              },
+              "buffer_size": {
+                "type": "integer",
+                "description": "Request buffer size for this provider"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

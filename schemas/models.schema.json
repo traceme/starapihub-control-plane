@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Models Registry",
+  "description": "JSON Schema for control-plane/policies/models.yaml - canonical logical model definitions",
+  "type": "object",
+  "required": ["models"],
+  "additionalProperties": false,
+  "properties": {
+    "models": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["display_name", "billing_name", "upstream_model", "risk_level", "allowed_groups", "channel", "route_policy"],
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Human-readable name shown in docs and dashboards"
+          },
+          "billing_name": {
+            "type": "string",
+            "description": "Name used in New-API billing records"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of the model's purpose and characteristics"
+          },
+          "upstream_model": {
+            "type": "string",
+            "description": "Provider-specific model ID sent to the upstream API"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Determines ClewdR eligibility and routing tier"
+          },
+          "allowed_groups": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "User groups that may access this model"
+          },
+          "channel": {
+            "type": "string",
+            "description": "New-API channel name (must match a key in channels.yaml)"
+          },
+          "route_policy": {
+            "type": "string",
+            "description": "Bifrost routing rule name (must match a key in routing-rules.yaml)"
+          },
+          "unofficial_allowed": {
+            "type": "boolean",
+            "description": "Whether ClewdR/unofficial providers may serve this model"
+          },
+          "caching_allowed": {
+            "type": "boolean",
+            "description": "Whether Bifrost semantic caching may be used"
+          }
+        }
+      }
+    }
+  }
+}
