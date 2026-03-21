@@ -19,5 +19,12 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Dashboard frontend build artifacts
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+
+# Go build artifacts
+dashboard/dashboard
+
 # Logs
 *.log

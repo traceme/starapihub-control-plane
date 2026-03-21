@@ -1,0 +1,242 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 640px;
+}
+
+.stepper {
+  display: flex;
+  gap: 4px;
+}
+
+.stepItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.stepCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--content-bg);
+  color: var(--text-light);
+  border: 2px solid var(--border);
+}
+
+.stepActive .stepCircle {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+
+.stepDone .stepCircle {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.stepLabel {
+  font-size: 11px;
+  color: var(--text-light);
+  text-align: center;
+}
+
+.stepActive .stepLabel {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.stepDone .stepLabel {
+  color: var(--green);
+}
+
+.error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cardDesc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field input {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.field input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn {
+  padding: 10px 20px;
+  background: var(--sidebar-bg);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.curlBlock {
+  background: #1a1a2e;
+  color: #e2e8f0;
+  padding: 14px 16px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.testResult {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.testOk {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.testFail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.testPre {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.doneTitle {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.doneText {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.keyBox {
+  background: var(--content-bg);
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.keyLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.keyRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.keyValue {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--card-bg);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  word-break: break-all;
+}
+
+.copyBtn {
+  padding: 8px 16px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copyBtn:hover {
+  opacity: 0.9;
+}
+
+.empty {
+  color: var(--text-light);
+  font-size: 14px;
+  padding: 40px 0;
+  text-align: center;
+}

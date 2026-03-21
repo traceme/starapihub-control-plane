@@ -109,6 +109,37 @@ services:
       start_period: 20s
 
   # ============================================================
+  # CONTROL PLANE — Dashboard and config sync
+  # NOT on the hot path. Manages config and monitors health.
+  # ============================================================
+
+  dashboard:
+    image: ${DASHBOARD_IMAGE:-starapihub/dashboard:local}
+    container_name: cp-dashboard
+    restart: unless-stopped
+    # ports:
+    #   - "127.0.0.1:8090:8090"
+    volumes:
+      - dashboard-data:/app/data
+      - newapi-logs:/var/log/nginx:ro
+    env_file:
+      - env/dashboard.env
+    networks:
+      - core-net      # Reaches New-API, Bifrost, Postgres, Redis
+      - provider-net  # Reaches ClewdR instances for cookie polling
+    depends_on:
+      new-api:
+        condition: service_healthy
+      bifrost:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8090/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================================
   # PROVIDER ZONE — Internal only, isolated from public ingress
   # Each ClewdR instance uses a dedicated cookie/account.
   # ============================================================
@@ -276,6 +307,8 @@ volumes:
     name: cp-clewdr-2-data
   clewdr-3-data:
     name: cp-clewdr-3-data
+  dashboard-data:
+    name: cp-dashboard-data
   pg-data:
     name: cp-pg-data
   redis-data:

@@ -20,6 +20,15 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
 
+  # Build dashboard from local source
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    image: starapihub/dashboard:local
+    ports:
+      - "127.0.0.1:8090:8090"
+
   # Build ClewdR from local source (no public Docker image available)
   # The Dockerfile uses /etc/clewdr as data dir, override volume mount accordingly
   clewdr-1:
