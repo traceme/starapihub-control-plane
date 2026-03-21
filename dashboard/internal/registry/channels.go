@@ -31,7 +31,84 @@ type ChannelDesired struct {
 // NOTE: ModelMapping, Setting, ParamOverride, HeaderOverride are stored as
 // maps in YAML for ergonomics but must be JSON-encoded to strings at sync time
 // (Phase 3). The json:"-" tags prevent direct JSON serialization of the map form.
-// Phase 3 will add MarshalJSON/ToAPIPayload methods.
+
+// ChannelAPIPayload is the JSON representation sent to New-API POST/PUT /api/channel/.
+// It converts YAML map fields to JSON-encoded strings as required by New-API.
+type ChannelAPIPayload struct {
+	ID             int     `json:"id,omitempty"`
+	Name           string  `json:"name"`
+	Type           int     `json:"type"`
+	Key            string  `json:"key"`
+	BaseURL        *string `json:"base_url,omitempty"`
+	Models         string  `json:"models"`
+	Group          string  `json:"group"`
+	Tag            *string `json:"tag,omitempty"`
+	ModelMapping   *string `json:"model_mapping,omitempty"`
+	Priority       *int64  `json:"priority,omitempty"`
+	Weight         *uint   `json:"weight,omitempty"`
+	Status         int     `json:"status"`
+	AutoBan        *int    `json:"auto_ban,omitempty"`
+	Setting        *string `json:"setting,omitempty"`
+	ParamOverride  *string `json:"param_override,omitempty"`
+	HeaderOverride *string `json:"header_override,omitempty"`
+}
+
+// ToAPIPayload converts a ChannelDesired to a ChannelAPIPayload suitable for New-API.
+// resolvedKey is the actual API key value (caller resolves KeyEnv via env lookup).
+// Map fields (ModelMapping, Setting, ParamOverride, HeaderOverride) are JSON-encoded to strings.
+func (c *ChannelDesired) ToAPIPayload(resolvedKey string) (*ChannelAPIPayload, error) {
+	p := &ChannelAPIPayload{
+		Name:     c.Name,
+		Type:     c.Type,
+		Key:      resolvedKey,
+		BaseURL:  c.BaseURL,
+		Models:   c.Models,
+		Group:    c.Group,
+		Tag:      c.Tag,
+		Priority: c.Priority,
+		Weight:   c.Weight,
+		Status:   c.Status,
+		AutoBan:  c.AutoBan,
+	}
+
+	if len(c.ModelMapping) > 0 {
+		b, err := json.Marshal(c.ModelMapping)
+		if err != nil {
+			return nil, err
+		}
+		s := string(b)
+		p.ModelMapping = &s
+	}
+
+	if len(c.Setting) > 0 {
+		b, err := json.Marshal(c.Setting)
+		if err != nil {
+			return nil, err
+		}
+		s := string(b)
+		p.Setting = &s
+	}
+
+	if len(c.ParamOverride) > 0 {
+		b, err := json.Marshal(c.ParamOverride)
+		if err != nil {
+			return nil, err
+		}
+		s := string(b)
+		p.ParamOverride = &s
+	}
+
+	if len(c.HeaderOverride) > 0 {
+		b, err := json.Marshal(c.HeaderOverride)
+		if err != nil {
+			return nil, err
+		}
+		s := string(b)
+		p.HeaderOverride = &s
+	}
+
+	return p, nil
+}
 
 // AddChannelRequest is the wrapper for POST /api/channel/ per audit finding.
 // Used at sync time, not in YAML.
