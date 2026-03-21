@@ -162,3 +162,188 @@ func (c *NewAPIClient) GetOptions(adminToken string) (json.RawMessage, error) {
 	}
 	return json.RawMessage(body), nil
 }
+
+// --- Typed methods for sync engine ---
+
+// ListChannelsTyped fetches all channels with pagination, returning typed structs.
+func (c *NewAPIClient) ListChannelsTyped(adminToken string) ([]ChannelResponse, error) {
+	var all []ChannelResponse
+	pageSize := 100
+	page := 0
+
+	for {
+		url := fmt.Sprintf("%s/api/channel/?p=%d&page_size=%d", c.baseURL, page, pageSize)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+
+		resp, err := doWithRetry(c.client, req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("list channels typed: status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var clr ChannelListResponse
+		if err := json.Unmarshal(body, &clr); err != nil {
+			return nil, fmt.Errorf("list channels typed: parse: %w", err)
+		}
+		if !clr.Success {
+			return nil, fmt.Errorf("list channels typed: API error: %s", clr.Message)
+		}
+
+		all = append(all, clr.Data.Items...)
+
+		if len(all) >= clr.Data.Total {
+			break
+		}
+		page++
+	}
+
+	return all, nil
+}
+
+// GetChannelTyped fetches a single channel by ID, returning a typed struct.
+func (c *NewAPIClient) GetChannelTyped(adminToken string, id int) (*ChannelResponse, error) {
+	url := fmt.Sprintf("%s/api/channel/%d", c.baseURL, id)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+
+	resp, err := doWithRetry(c.client, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get channel %d: status %d: %s", id, resp.StatusCode, string(body))
+	}
+
+	var scr SingleChannelResponse
+	if err := json.Unmarshal(body, &scr); err != nil {
+		return nil, fmt.Errorf("get channel %d: parse: %w", id, err)
+	}
+	if !scr.Success {
+		return nil, fmt.Errorf("get channel %d: API error: %s", id, scr.Message)
+	}
+	return &scr.Data, nil
+}
+
+// UpdateChannelTyped updates a channel via PUT /api/channel/.
+func (c *NewAPIClient) UpdateChannelTyped(adminToken string, channel json.RawMessage) error {
+	req, err := http.NewRequest("PUT", c.baseURL+"/api/channel/", bytes.NewReader(channel))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := doWithRetry(c.client, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("update channel: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("update channel: parse response: %w", err)
+	}
+	if !result.Success {
+		return fmt.Errorf("update channel: API error: %s", result.Message)
+	}
+	return nil
+}
+
+// PutOption sets a system option via PUT /api/option/.
+func (c *NewAPIClient) PutOption(adminToken string, key string, value string) error {
+	payload, err := json.Marshal(map[string]string{"key": key, "value": value})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("PUT", c.baseURL+"/api/option/", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := doWithRetry(c.client, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("put option %s: status %d: %s", key, resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("put option %s: parse response: %w", key, err)
+	}
+	if !result.Success {
+		return fmt.Errorf("put option %s: API error: %s", key, result.Message)
+	}
+	return nil
+}
+
+// GetOptionsTyped fetches all system options, returning typed entries.
+func (c *NewAPIClient) GetOptionsTyped(adminToken string) ([]OptionEntry, error) {
+	req, err := http.NewRequest("GET", c.baseURL+"/api/option/", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+
+	resp, err := doWithRetry(c.client, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get options typed: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var olr OptionListResponse
+	if err := json.Unmarshal(body, &olr); err != nil {
+		return nil, fmt.Errorf("get options typed: parse: %w", err)
+	}
+	if !olr.Success {
+		return nil, fmt.Errorf("get options typed: API error: %s", olr.Message)
+	}
+	return olr.Data, nil
+}
