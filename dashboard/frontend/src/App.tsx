@@ -38,6 +38,8 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [state, setState] = useState<SSEState>(EMPTY_STATE);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [lastDataAt, setLastDataAt] = useState<number>(0);
+  const [isStale, setIsStale] = useState(false);
   const disconnectRef = useRef<(() => void) | null>(null);
 
   const handleLogin = useCallback((t: string) => {
@@ -59,12 +61,14 @@ export default function App() {
       token,
       (data) => {
         setState(data as SSEState);
+        setLastDataAt(Date.now());
+        setIsStale(false);
       },
       (err) => {
         console.error('SSE error:', err);
         setConnected(false);
       },
-      () => setConnected(true),
+      () => { setConnected(true); setLastDataAt(Date.now()); setIsStale(false); },
     );
     disconnectRef.current = disconnect;
 
@@ -74,18 +78,27 @@ export default function App() {
     };
   }, [token]);
 
+  // Staleness detection: if no data for 30s, mark stale
+  useEffect(() => {
+    if (!token || !lastDataAt) return;
+    const interval = setInterval(() => {
+      if (Date.now() - lastDataAt > 30000) setIsStale(true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [token, lastDataAt]);
+
   if (!token) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
     <div className={styles.layout}>
-      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ''}`}>
+      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ''}`} role="complementary" aria-label="Sidebar navigation">
         <div className={styles.brand}>
           <span className={styles.brandIcon}>&#9733;</span>
           <span className={styles.brandText}>StarAPIHub</span>
         </div>
-        <nav className={styles.nav}>
+        <nav className={styles.nav} aria-label="Main navigation">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -130,7 +143,13 @@ export default function App() {
 
         <AlertBanner alerts={state.alerts} />
 
-        <main className={styles.content}>
+        {isStale && (
+          <div className={styles.staleBanner}>
+            Data may be stale — last update {Math.round((Date.now() - lastDataAt) / 1000)}s ago. Reconnecting...
+          </div>
+        )}
+
+        <main className={`${styles.content} ${isStale ? styles.contentStale : ''}`} role="main" aria-label="Dashboard content">
           <Routes>
             <Route path="/" element={<HealthDashboard state={state} />} />
             <Route path="/cookies" element={<CookiePanel cookies={state.cookies} />} />

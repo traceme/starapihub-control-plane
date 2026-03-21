@@ -165,3 +165,22 @@
   padding: 20px 0;
   text-align: center;
 }
+
+.emptyCard {
+  text-align: center;
+  padding: 32px 20px;
+  grid-column: 1 / -1;
+}
+
+.emptyTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.emptyHint {
+  font-size: 13px;
+  color: var(--text-light);
+  line-height: 1.5;
+}

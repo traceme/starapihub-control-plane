@@ -48,7 +48,10 @@ export default function HealthDashboard({ state }: Props) {
         <h2 className={styles.sectionTitle}>Service Status</h2>
         <div className={styles.serviceGrid}>
           {services.length === 0 && (
-            <p className={styles.empty}>Waiting for data...</p>
+            <div className={styles.emptyCard}>
+              <p className={styles.emptyTitle}>Connecting to services...</p>
+              <p className={styles.emptyHint}>Health data will appear here once the dashboard connects to your stack via SSE.</p>
+            </div>
           )}
           {services.map(([name, svc]) => {
             const label = SERVICE_LABELS[name] || name.replace(/_/g, ' ');
@@ -57,11 +60,14 @@ export default function HealthDashboard({ state }: Props) {
                 key={name}
                 className={styles.serviceCard}
                 style={{ borderLeftColor: statusColor(svc.status) }}
+                role="status"
+                aria-label={`${label}: ${svc.status}, latency ${svc.latency_ms}ms`}
               >
                 <div className={styles.serviceHeader}>
                   <span
                     className={styles.dot}
                     style={{ background: statusColor(svc.status) }}
+                    aria-hidden="true"
                   />
                   <span className={styles.serviceName}>{label}</span>
                 </div>
@@ -109,7 +115,7 @@ export default function HealthDashboard({ state }: Props) {
           <h2 className={styles.sectionTitle}>Model Usage (24h)</h2>
           <div className={styles.chartBox}>
             {modelEntries.length === 0 && (
-              <p className={styles.empty}>No model data yet</p>
+              <p className={styles.emptyHint}>No model traffic recorded yet. Send a request through the gateway to see usage stats.</p>
             )}
             {modelEntries
               .sort((a, b) => b[1] - a[1])
@@ -135,7 +141,7 @@ export default function HealthDashboard({ state }: Props) {
           <h2 className={styles.sectionTitle}>Status Codes</h2>
           <div className={styles.chartBox}>
             {statusEntries.length === 0 && (
-              <p className={styles.empty}>No status data yet</p>
+              <p className={styles.emptyHint}>Status code breakdown appears after traffic flows through the gateway.</p>
             )}
             {statusEntries
               .sort((a, b) => b[1] - a[1])
