@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 func (h *Handler) HandleListLogs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	status, _ := strconv.Atoi(q.Get("status"))
+	// Parse status: supports exact code (200) or range strings (2xx, 4xx, 5xx)
+	statusParam := q.Get("status")
+	statusMin, statusMax := parseStatusRange(statusParam)
 	model := q.Get("model")
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	if limit <= 0 {
@@ -25,7 +28,7 @@ func (h *Handler) HandleListLogs(w http.ResponseWriter, r *http.Request) {
 		until, _ = time.Parse(time.RFC3339, u)
 	}
 
-	entries, err := h.store.QueryLogs(status, model, since, until, limit)
+	entries, err := h.store.QueryLogs(statusMin, statusMax, model, since, until, limit)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -65,4 +68,26 @@ func (h *Handler) HandleGetLog(w http.ResponseWriter, r *http.Request) {
 		"request_id": requestID,
 		"entries":    entries,
 	})
+}
+
+// parseStatusRange parses a status parameter into min/max range.
+// "2xx" → (200, 299), "4xx" → (400, 499), "200" → (200, 200), "" → (0, 0)
+func parseStatusRange(s string) (int, int) {
+	if s == "" {
+		return 0, 0
+	}
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(strings.ToLower(s), "xx") {
+		prefix := s[:len(s)-2]
+		base, err := strconv.Atoi(prefix)
+		if err != nil {
+			return 0, 0
+		}
+		return base * 100, base*100 + 99
+	}
+	code, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, 0
+	}
+	return code, code
 }

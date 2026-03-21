@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/starapihub/dashboard/internal/store"
 )
+
+// alertMu protects the check-then-insert in fireAlert to prevent duplicate alerts.
+var alertMu sync.Mutex
 
 // StartAlertChecker runs after each poll cycle to check for alert conditions.
 func StartAlertChecker(ctx context.Context, cfg Config) {
@@ -68,6 +72,10 @@ func checkAlerts(cfg Config) {
 }
 
 func fireAlert(cfg Config, alert store.Alert) {
+	// Serialize check-then-insert to prevent duplicate alerts from concurrent callers.
+	alertMu.Lock()
+	defer alertMu.Unlock()
+
 	// Deduplicate: don't fire the same alert type+service within 5 minutes
 	recent, err := cfg.Store.HasRecentAlert(alert.Type, alert.Service, 5*time.Minute)
 	if err != nil {

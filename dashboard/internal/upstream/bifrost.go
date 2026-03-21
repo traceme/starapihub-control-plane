@@ -107,6 +107,24 @@ func (c *BifrostClient) CreateProvider(provider json.RawMessage) (json.RawMessag
 	return json.RawMessage(body), nil
 }
 
+// DeleteProvider deletes a Bifrost provider via DELETE /api/providers/{id}.
+func (c *BifrostClient) DeleteProvider(id string) error {
+	req, err := http.NewRequest("DELETE", c.baseURL+"/api/providers/"+id, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("delete provider %s: status %d", id, resp.StatusCode)
+	}
+	return nil
+}
+
 // ListVirtualKeys lists Bifrost virtual keys via GET /api/governance/virtual-keys.
 func (c *BifrostClient) ListVirtualKeys() (json.RawMessage, error) {
 	resp, err := c.client.Get(c.baseURL + "/api/governance/virtual-keys")

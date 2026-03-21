@@ -50,40 +50,49 @@ func (h *Handler) HandleCreateModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 1: Create provider in Bifrost for each provider ref
+	// Step 1: Create providers in Bifrost
+	var createdProviderIDs []string
 	for _, p := range model.Providers {
-		providerPayload, _ := json.Marshal(map[string]interface{}{
+		providerPayload, err := json.Marshal(map[string]interface{}{
 			"id":         p.ProviderID,
 			"model_name": p.ModelName,
 			"weight":     p.Weight,
 			"priority":   p.Priority,
 		})
-		if _, err := h.bifrost.CreateProvider(providerPayload); err != nil {
-			slog.Error("create bifrost provider", "error", err, "provider_id", p.ProviderID)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadGateway)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "failed to create bifrost provider: " + err.Error(),
-			})
+		if err != nil {
+			slog.Error("marshal bifrost provider payload", "error", err)
+			respondError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		if _, err := h.bifrost.CreateProvider(providerPayload); err != nil {
+			slog.Error("create bifrost provider", "error", err, "provider_id", p.ProviderID)
+			// Compensate: delete already-created providers
+			h.rollbackBifrostProviders(createdProviderIDs)
+			respondError(w, http.StatusBadGateway, "failed to create bifrost provider: "+err.Error())
+			return
+		}
+		createdProviderIDs = append(createdProviderIDs, p.ProviderID)
 	}
 
 	// Step 2: Create channel in New-API
-	channelPayload, _ := json.Marshal(map[string]interface{}{
-		"name":    model.Channel,
-		"models":  model.Name,
-		"type":    1, // OpenAI compatible
-		"key":     "bifrost-internal",
+	channelPayload, err := json.Marshal(map[string]interface{}{
+		"name":     model.Channel,
+		"models":   model.Name,
+		"type":     1, // OpenAI compatible
+		"key":      "bifrost-internal",
 		"base_url": h.bifrost.BaseURL(),
 	})
+	if err != nil {
+		slog.Error("marshal newapi channel payload", "error", err)
+		h.rollbackBifrostProviders(createdProviderIDs)
+		respondError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	if _, err := h.newAPI.CreateChannel(h.dashboardToken, channelPayload); err != nil {
 		slog.Error("create newapi channel", "error", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "failed to create new-api channel: " + err.Error(),
-		})
+		// Compensate: roll back Bifrost providers
+		h.rollbackBifrostProviders(createdProviderIDs)
+		respondError(w, http.StatusBadGateway, "failed to create new-api channel: "+err.Error())
 		return
 	}
 
@@ -101,15 +110,18 @@ func (h *Handler) HandleUpdateModel(w http.ResponseWriter, r *http.Request) {
 	}
 	model.Name = id
 
-	// For update, we re-sync providers to Bifrost and channel to New-API
-	// This is a simplified approach — a production system would diff and patch
+	// Re-sync providers to Bifrost (upsert semantics)
 	for _, p := range model.Providers {
-		providerPayload, _ := json.Marshal(map[string]interface{}{
+		providerPayload, err := json.Marshal(map[string]interface{}{
 			"id":         p.ProviderID,
 			"model_name": p.ModelName,
 			"weight":     p.Weight,
 			"priority":   p.Priority,
 		})
+		if err != nil {
+			slog.Error("marshal bifrost provider payload", "error", err)
+			continue
+		}
 		if _, err := h.bifrost.CreateProvider(providerPayload); err != nil {
 			slog.Error("update bifrost provider", "error", err, "provider_id", p.ProviderID)
 		}
@@ -122,13 +134,36 @@ func (h *Handler) HandleUpdateModel(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleDeleteModel(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	// Note: Bifrost and New-API don't have simple delete-by-name APIs.
-	// This is a placeholder that returns success — in production, this would
-	// call the appropriate DELETE endpoints on both upstreams.
-	slog.Info("delete model requested", "id", id)
+	// Delete from Bifrost
+	if err := h.bifrost.DeleteProvider(id); err != nil {
+		slog.Error("delete bifrost provider", "error", err, "id", id)
+		// Continue to attempt New-API deletion even if Bifrost fails
+	}
+
+	// Delete from New-API
+	if err := h.newAPI.DeleteChannel(h.dashboardToken, id); err != nil {
+		slog.Error("delete newapi channel", "error", err, "id", id)
+		respondError(w, http.StatusBadGateway, "failed to delete from upstreams: "+err.Error())
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "name": id})
+}
+
+// rollbackBifrostProviders attempts to delete providers that were already created.
+func (h *Handler) rollbackBifrostProviders(ids []string) {
+	for _, id := range ids {
+		if err := h.bifrost.DeleteProvider(id); err != nil {
+			slog.Error("compensating delete of bifrost provider failed", "error", err, "provider_id", id)
+		}
+	}
+}
+
+func respondError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func jsonOrNull(data json.RawMessage) interface{} {

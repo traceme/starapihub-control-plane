@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/starapihub/dashboard/internal/store"
@@ -306,6 +307,7 @@ func pollCookies(cfg Config) {
 func StartLogTailer(ctx context.Context, cfg Config) {
 	go func() {
 		var lastOffset int64
+		var lastInode uint64
 		var recentEntries []store.LogEntry
 
 		// nginx log regex:
@@ -322,9 +324,10 @@ func StartLogTailer(ctx context.Context, cfg Config) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				entries, newOffset := tailLog(cfg.NginxLogPath, lastOffset, logRegex)
-				if newOffset > lastOffset {
+				entries, newOffset, newInode := tailLog(cfg.NginxLogPath, lastOffset, lastInode, logRegex)
+				if newOffset > lastOffset || newInode != lastInode {
 					lastOffset = newOffset
+					lastInode = newInode
 				}
 
 				if len(entries) > 0 {
@@ -333,7 +336,7 @@ func StartLogTailer(ctx context.Context, cfg Config) {
 					}
 				}
 
-				// Keep a sliding window for stats
+				// Keep a sliding window for stats (capped at 10,000 entries)
 				now := time.Now()
 				cutoff := now.Add(-60 * time.Second)
 				recentEntries = append(recentEntries, entries...)
@@ -347,6 +350,12 @@ func StartLogTailer(ctx context.Context, cfg Config) {
 				}
 				recentEntries = trimmed
 
+				// Hard cap to prevent unbounded memory growth
+				const maxRecentEntries = 10000
+				if len(recentEntries) > maxRecentEntries {
+					recentEntries = recentEntries[len(recentEntries)-maxRecentEntries:]
+				}
+
 				stats := computeStats(recentEntries)
 				cfg.State.SetLogStats(stats)
 			}
@@ -354,30 +363,43 @@ func StartLogTailer(ctx context.Context, cfg Config) {
 	}()
 }
 
-func tailLog(path string, offset int64, re *regexp.Regexp) ([]store.LogEntry, int64) {
+// tailLog reads new lines from the log file since the last offset.
+// Detects log rotation via inode change and resets offset accordingly.
+func tailLog(path string, offset int64, lastInode uint64, re *regexp.Regexp) ([]store.LogEntry, int64, uint64) {
 	f, err := os.Open(path)
 	if err != nil {
 		// Not an error during startup when file doesn't exist
-		return nil, offset
+		return nil, offset, lastInode
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, offset
+		return nil, offset, lastInode
 	}
 
-	// If the file was truncated (log rotation), reset offset
+	// Detect inode change (log rotation via rename + create)
+	var currentInode uint64
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		currentInode = stat.Ino
+	}
+	if lastInode != 0 && currentInode != lastInode {
+		slog.Info("log file rotated (inode changed)", "old_inode", lastInode, "new_inode", currentInode)
+		offset = 0
+	}
+
+	// If the file was truncated (log rotation via truncate), reset offset
 	if info.Size() < offset {
+		slog.Info("log file truncated", "old_offset", offset, "new_size", info.Size())
 		offset = 0
 	}
 
 	if info.Size() == offset {
-		return nil, offset
+		return nil, offset, currentInode
 	}
 
 	if _, err := f.Seek(offset, 0); err != nil {
-		return nil, offset
+		return nil, offset, currentInode
 	}
 
 	var entries []store.LogEntry
@@ -395,7 +417,7 @@ func tailLog(path string, offset int64, re *regexp.Regexp) ([]store.LogEntry, in
 
 	// After using bufio.Scanner, the file position may be past what was scanned
 	// due to read-ahead buffering. Use file size as the offset since we read to EOF.
-	return entries, info.Size()
+	return entries, info.Size(), currentInode
 }
 
 func parseLine(line string, re *regexp.Regexp) (store.LogEntry, bool) {
@@ -491,4 +513,3 @@ func percentile(sorted []float64, p float64) float64 {
 	frac := idx - float64(lower)
 	return sorted[lower]*(1-frac) + sorted[upper]*frac
 }
-

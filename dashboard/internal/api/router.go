@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -102,7 +103,7 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 			return
 		}
 		provided := strings.TrimPrefix(auth, "Bearer ")
-		if provided != token {
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			http.Error(w, `{"error":"invalid token"}`, http.StatusForbidden)
 			return

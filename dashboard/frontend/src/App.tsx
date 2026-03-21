@@ -34,7 +34,7 @@ const EMPTY_STATE: SSEState = {
 };
 
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem('starapihub_token') || '');
+  const [token, setToken] = useState(() => sessionStorage.getItem('starapihub_token') || '');
   const [connected, setConnected] = useState(false);
   const [state, setState] = useState<SSEState>(EMPTY_STATE);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -43,12 +43,12 @@ export default function App() {
   const disconnectRef = useRef<(() => void) | null>(null);
 
   const handleLogin = useCallback((t: string) => {
-    localStorage.setItem('starapihub_token', t);
+    sessionStorage.setItem('starapihub_token', t);
     setToken(t);
   }, []);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('starapihub_token');
+    sessionStorage.removeItem('starapihub_token');
     setToken('');
     setConnected(false);
     if (disconnectRef.current) disconnectRef.current();

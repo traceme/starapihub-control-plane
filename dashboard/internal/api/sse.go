@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -35,6 +36,9 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 			snapshot := h.state.GetSnapshot()
 			data, err := json.Marshal(snapshot)
 			if err != nil {
+				slog.Error("SSE marshal snapshot", "error", err)
+				fmt.Fprintf(w, "event: error\ndata: {\"error\":\"internal marshal failure\"}\n\n")
+				flusher.Flush()
 				continue
 			}
 			fmt.Fprintf(w, "data: %s\n\n", data)

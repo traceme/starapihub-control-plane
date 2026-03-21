@@ -1,7 +1,7 @@
 import type { LogEntry, LogicalModel, WizardStatus } from './types';
 
 function getToken(): string {
-  return localStorage.getItem('starapihub_token') || '';
+  return sessionStorage.getItem('starapihub_token') || '';
 }
 
 function headers(): HeadersInit {
@@ -17,7 +17,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { ...headers(), ...init?.headers },
   });
   if (res.status === 401) {
-    localStorage.removeItem('starapihub_token');
+    sessionStorage.removeItem('starapihub_token');
     window.location.reload();
     throw new Error('Unauthorized');
   }

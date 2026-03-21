@@ -61,6 +61,11 @@ func New(dbPath string) (*Store, error) {
 		}
 	}
 
+	// SQLite WAL supports concurrent readers but only one writer.
+	// Limit connections to avoid "database is locked" under contention.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -199,17 +204,26 @@ func (s *Store) InsertLogEntries(entries []LogEntry) error {
 }
 
 // QueryLogs returns log entries matching the given filters.
-func (s *Store) QueryLogs(status int, model string, since, until time.Time, limit int) ([]LogEntry, error) {
+// statusMin/statusMax define a range (e.g., 200-299 for "2xx"). Both 0 means no filter.
+func (s *Store) QueryLogs(statusMin, statusMax int, model string, since, until time.Time, limit int) ([]LogEntry, error) {
 	if limit <= 0 {
 		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 	query := `SELECT id, timestamp, method, path, status, latency_ms, request_id, model, upstream_time, created_at
 	          FROM log_entries WHERE 1=1`
 	var args []interface{}
 
-	if status > 0 {
-		query += ` AND status = ?`
-		args = append(args, status)
+	if statusMin > 0 && statusMax > 0 {
+		if statusMin == statusMax {
+			query += ` AND status = ?`
+			args = append(args, statusMin)
+		} else {
+			query += ` AND status >= ? AND status <= ?`
+			args = append(args, statusMin, statusMax)
+		}
 	}
 	if model != "" {
 		query += ` AND model = ?`

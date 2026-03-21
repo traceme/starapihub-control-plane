@@ -114,34 +114,38 @@ func (h *Handler) HandleWizardTest(w http.ResponseWriter, r *http.Request) {
 		req.Prompt = "Say hello in one sentence."
 	}
 
-	// Send a test completion request through the New-API -> Bifrost chain
-	testPayload, _ := json.Marshal(map[string]interface{}{
+	// Send a real test completion request through New-API -> Bifrost chain
+	testPayload, err := json.Marshal(map[string]interface{}{
 		"model": req.ModelName,
 		"messages": []map[string]string{
 			{"role": "user", "content": req.Prompt},
 		},
 		"max_tokens": 50,
 	})
-
-	result, err := h.newAPI.ListModels(h.dashboardToken)
 	if err != nil {
-		// If we can't even list models, the chain is broken
+		slog.Error("wizard: marshal test payload", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "internal error"})
+		return
+	}
+
+	result, err := h.newAPI.SendChatCompletion(h.dashboardToken, testPayload)
+	if err != nil {
+		slog.Error("wizard: test completion failed", "error", err, "model", req.ModelName)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
 		json.NewEncoder(w).Encode(map[string]string{
-			"error": "cannot reach New-API: " + err.Error(),
+			"error": "test request failed: " + err.Error(),
 		})
 		return
 	}
 
-	// For now, return the test payload that would be sent and models available
-	// A full implementation would POST to /v1/chat/completions
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":       "test_prepared",
-		"model":        req.ModelName,
-		"test_payload": json.RawMessage(testPayload),
-		"models":       json.RawMessage(result),
+		"status":   "success",
+		"model":    req.ModelName,
+		"response": json.RawMessage(result),
 	})
 }
 
