@@ -1,0 +1,63 @@
+# Canonical Channel Registry
+#
+# This is the authoritative registry of New-API channels.
+# It is NOT an example -- changes here drive upstream sync operations.
+#
+# Each channel represents a connection from New-API to Bifrost,
+# routing a set of logical models through a specific tier.
+#
+# Secrets are NEVER stored in this file. API keys are referenced
+# by environment variable name via key_env fields.
+#
+# After editing, run: starapihub validate --config-dir policies/
+
+channels:
+
+  bifrost-premium:
+    name: "Bifrost Premium"
+    type: 43
+    key_env: BIFROST_API_KEY
+    base_url: "http://bifrost:8080"
+    models: "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini"
+    group: "default"
+    tag: "premium"
+    model_mapping:
+      claude-sonnet: "claude-sonnet-4-20250514"
+      claude-opus: "claude-opus-4-20250514"
+      claude-haiku: "claude-haiku-4-5-20251001"
+    priority: 0
+    weight: 10
+    status: 1
+    auto_ban: 1
+
+  bifrost-standard:
+    name: "Bifrost Standard"
+    type: 43
+    key_env: BIFROST_API_KEY
+    base_url: "http://bifrost:8080"
+    models: "cheap-chat,fast-chat"
+    group: "default"
+    tag: "standard"
+    model_mapping:
+      cheap-chat: "claude-sonnet-4-20250514"
+      fast-chat: "claude-haiku-4-5-20251001"
+    priority: 10
+    weight: 5
+    status: 1
+    auto_ban: 1
+
+  bifrost-risky:
+    name: "Bifrost Risky"
+    type: 43
+    key_env: BIFROST_API_KEY
+    base_url: "http://bifrost:8080"
+    models: "lab-claude,lab-claude-opus"
+    group: "lab"
+    tag: "risky"
+    model_mapping:
+      lab-claude: "claude-sonnet-4-20250514"
+      lab-claude-opus: "claude-opus-4-20250514"
+    priority: 20
+    weight: 1
+    status: 1
+    auto_ban: 0

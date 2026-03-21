@@ -1,0 +1,56 @@
+# Canonical Pricing Registry
+#
+# This is the authoritative registry of model pricing (token ratios).
+# It is NOT an example -- changes here drive upstream sync operations.
+#
+# Each entry maps a logical model name to its pricing ratios, used by
+# New-API for quota tracking and billing calculations.
+#
+# Ratio fields:
+#   model_ratio       -- Input token cost multiplier (relative to base unit)
+#   completion_ratio  -- Output token cost multiplier (relative to base unit)
+#
+# A ratio of 0.0 means free (no quota consumed). This is used for
+# lab/experimental models routed through ClewdR.
+#
+# Secrets are NEVER stored in this file.
+#
+# After editing, run: starapihub validate --config-dir policies/
+
+pricing:
+
+  claude-sonnet:
+    model_ratio: 1.0
+    completion_ratio: 5.0
+
+  claude-opus:
+    model_ratio: 5.0
+    completion_ratio: 25.0
+
+  claude-haiku:
+    model_ratio: 0.25
+    completion_ratio: 1.25
+
+  gpt-4o:
+    model_ratio: 1.0
+    completion_ratio: 3.0
+
+  gpt-4o-mini:
+    model_ratio: 0.1
+    completion_ratio: 0.3
+
+  cheap-chat:
+    model_ratio: 0.5
+    completion_ratio: 2.5
+
+  fast-chat:
+    model_ratio: 0.25
+    completion_ratio: 1.25
+
+  lab-claude:
+    model_ratio: 0.0
+    completion_ratio: 0.0
+
+  lab-claude-opus:
+    model_ratio: 0.0
+    completion_ratio: 0.0

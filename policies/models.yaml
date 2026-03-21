@@ -1,0 +1,137 @@
+# Canonical Model Registry
+#
+# This is the authoritative registry of logical models exposed to clients.
+# It is NOT an example -- changes here drive upstream sync operations.
+#
+# Logical models are stable abstractions over provider-specific model IDs.
+# They map to New-API channels and Bifrost route policies.
+#
+# Secrets are NEVER stored in this file. API keys and passwords are
+# referenced by environment variable name only (see providers.yaml).
+#
+# After editing, run: starapihub validate --config-dir policies/
+
+models:
+
+  # ----------------------------------------------------------------
+  # PREMIUM TIER -- Official API providers only, SLA-backed
+  # Channel: bifrost-premium | Policy: premium-claude / premium-openai
+  # ----------------------------------------------------------------
+
+  claude-sonnet:
+    display_name: "Claude Sonnet"
+    billing_name: "claude-sonnet"
+    description: "Latest Claude Sonnet model via official Anthropic API"
+    upstream_model: "claude-sonnet-4-20250514"
+    risk_level: low
+    allowed_groups: ["all"]
+    channel: bifrost-premium
+    route_policy: premium-claude
+    unofficial_allowed: false
+    caching_allowed: true
+
+  claude-opus:
+    display_name: "Claude Opus"
+    billing_name: "claude-opus"
+    description: "Most capable Claude model via official Anthropic API"
+    upstream_model: "claude-opus-4-20250514"
+    risk_level: low
+    allowed_groups: ["premium", "admin"]
+    channel: bifrost-premium
+    route_policy: premium-claude
+    unofficial_allowed: false
+    caching_allowed: true
+
+  claude-haiku:
+    display_name: "Claude Haiku"
+    billing_name: "claude-haiku"
+    description: "Fast, cost-effective Claude model for high-throughput tasks"
+    upstream_model: "claude-haiku-4-5-20251001"
+    risk_level: low
+    allowed_groups: ["all"]
+    channel: bifrost-premium
+    route_policy: premium-claude
+    unofficial_allowed: false
+    caching_allowed: true
+
+  gpt-4o:
+    display_name: "GPT-4o"
+    billing_name: "gpt-4o"
+    description: "OpenAI's flagship multimodal model"
+    upstream_model: "gpt-4o"
+    risk_level: low
+    allowed_groups: ["all"]
+    channel: bifrost-premium
+    route_policy: premium-openai
+    unofficial_allowed: false
+    caching_allowed: true
+
+  gpt-4o-mini:
+    display_name: "GPT-4o Mini"
+    billing_name: "gpt-4o-mini"
+    description: "Compact, fast OpenAI model for simple tasks"
+    upstream_model: "gpt-4o-mini"
+    risk_level: low
+    allowed_groups: ["all"]
+    channel: bifrost-premium
+    route_policy: premium-openai
+    unofficial_allowed: false
+    caching_allowed: true
+
+  # ----------------------------------------------------------------
+  # STANDARD TIER -- Official preferred, ClewdR as last-resort
+  # Channel: bifrost-standard | Policy: standard-claude
+  # ----------------------------------------------------------------
+
+  cheap-chat:
+    display_name: "Cheap Chat"
+    billing_name: "cheap-chat"
+    description: "Cost-optimized chat -- official API preferred, ClewdR as last-resort fallback"
+    upstream_model: "claude-sonnet-4-20250514"
+    risk_level: medium
+    allowed_groups: ["all"]
+    channel: bifrost-standard
+    route_policy: standard-claude
+    unofficial_allowed: true
+    caching_allowed: true
+
+  fast-chat:
+    display_name: "Fast Chat"
+    billing_name: "fast-chat"
+    description: "Speed-optimized chat -- routes to fastest available provider"
+    upstream_model: "claude-haiku-4-5-20251001"
+    risk_level: medium
+    allowed_groups: ["all"]
+    channel: bifrost-standard
+    route_policy: standard-claude
+    unofficial_allowed: true
+    caching_allowed: true
+
+  # ----------------------------------------------------------------
+  # LAB / RISKY TIER -- ClewdR primary, no SLA
+  # Channel: bifrost-risky | Policy: risky-claude
+  # ----------------------------------------------------------------
+
+  lab-claude:
+    display_name: "Lab Claude"
+    billing_name: "lab-claude"
+    description: "Experimental -- ClewdR primary (unofficial). No SLA. For testing only."
+    upstream_model: "claude-sonnet-4-20250514"
+    risk_level: high
+    allowed_groups: ["lab", "admin"]
+    channel: bifrost-risky
+    route_policy: risky-claude
+    unofficial_allowed: true
+    caching_allowed: false
+
+  lab-claude-opus:
+    display_name: "Lab Claude Opus"
+    billing_name: "lab-claude-opus"
+    description: "Experimental Opus via ClewdR. No SLA. For testing only."
+    upstream_model: "claude-opus-4-20250514"
+    risk_level: high
+    allowed_groups: ["lab", "admin"]
+    channel: bifrost-risky
+    route_policy: risky-claude
+    unofficial_allowed: true
+    caching_allowed: false

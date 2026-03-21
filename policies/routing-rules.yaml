@@ -1,0 +1,72 @@
+# Canonical Routing Rules Registry
+#
+# This is the authoritative registry of Bifrost routing rules.
+# It is NOT an example -- changes here drive upstream sync operations.
+#
+# Each rule defines a CEL expression that matches requests to provider
+# targets with weighted load balancing and fallback chains.
+#
+# Rules are evaluated in priority order (lower number = higher priority).
+# The first matching rule determines the target provider(s).
+#
+# Secrets are NEVER stored in this file.
+#
+# After editing, run: starapihub validate --config-dir policies/
+
+routing_rules:
+
+  premium-claude:
+    name: "Premium Claude Models"
+    description: "Route premium Claude models to official Anthropic only"
+    enabled: true
+    cel_expression: 'request.model in ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-haiku-4-5-20251001"]'
+    targets:
+      - provider: "anthropic"
+        weight: 1.0
+    fallbacks: []
+    scope: "global"
+    priority: 10
+
+  premium-openai:
+    name: "Premium OpenAI Models"
+    description: "Route OpenAI models to official OpenAI only"
+    enabled: true
+    cel_expression: 'request.model in ["gpt-4o", "gpt-4o-mini"]'
+    targets:
+      - provider: "openai"
+        weight: 1.0
+    fallbacks: []
+    scope: "global"
+    priority: 20
+
+  standard-claude:
+    name: "Standard Claude with ClewdR fallback"
+    description: "Official Anthropic first, ClewdR as last resort"
+    enabled: true
+    cel_expression: 'request.model in ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"] && request.metadata.tier == "standard"'
+    targets:
+      - provider: "anthropic"
+        weight: 1.0
+    fallbacks:
+      - "clewdr-1"
+      - "clewdr-2"
+      - "clewdr-3"
+    scope: "global"
+    priority: 30
+
+  risky-claude:
+    name: "Risky Claude via ClewdR"
+    description: "ClewdR primary, official as backup"
+    enabled: true
+    cel_expression: 'request.model in ["claude-sonnet-4-20250514", "claude-opus-4-20250514"] && request.metadata.tier == "risky"'
+    targets:
+      - provider: "clewdr-1"
+        weight: 0.34
+      - provider: "clewdr-2"
+        weight: 0.33
+      - provider: "clewdr-3"
+        weight: 0.33
+    fallbacks:
+      - "anthropic"
+    scope: "global"
+    priority: 40

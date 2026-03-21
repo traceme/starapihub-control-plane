@@ -1,0 +1,115 @@
+# Canonical Provider Registry
+#
+# This is the authoritative registry of Bifrost providers.
+# It is NOT an example -- changes here drive upstream sync operations.
+#
+# Each provider maps to a Bifrost provider endpoint with connection
+# details, API keys (via env var references), and network configuration.
+#
+# Secrets are NEVER stored in this file. API keys and passwords are
+# referenced by environment variable name only (value_env fields).
+#
+# After editing, run: starapihub validate --config-dir policies/
+
+providers:
+
+  anthropic:
+    description: "Direct Anthropic API"
+    keys:
+      - id: anthropic-primary
+        name: "Anthropic Primary"
+        value_env: ANTHROPIC_API_KEY
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+          - claude-haiku-4-5-20251001
+        weight: 1.0
+        enabled: true
+    network_config:
+      default_request_timeout_in_seconds: 60
+      max_retries: 2
+      retry_backoff_initial_ms: 500
+      retry_backoff_max_ms: 5000
+
+  openai:
+    description: "Direct OpenAI API"
+    keys:
+      - id: openai-primary
+        name: "OpenAI Primary"
+        value_env: OPENAI_API_KEY
+        models:
+          - gpt-4o
+          - gpt-4o-mini
+        weight: 1.0
+        enabled: true
+    network_config:
+      default_request_timeout_in_seconds: 30
+      max_retries: 2
+      retry_backoff_initial_ms: 500
+      retry_backoff_max_ms: 5000
+
+  clewdr-1:
+    description: "ClewdR instance 1"
+    custom_provider_config:
+      is_key_less: false
+      base_provider_type: "openai"
+    keys:
+      - id: clewdr-1-key
+        name: "ClewdR 1"
+        value_env: CLEWDR_1_PASSWORD
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0
+        enabled: true
+    network_config:
+      base_url: "http://clewdr-1:8484"
+      default_request_timeout_in_seconds: 120
+      max_retries: 0
+      retry_backoff_initial_ms: 0
+      retry_backoff_max_ms: 0
+      stream_idle_timeout_in_seconds: 120
+
+  clewdr-2:
+    description: "ClewdR instance 2"
+    custom_provider_config:
+      is_key_less: false
+      base_provider_type: "openai"
+    keys:
+      - id: clewdr-2-key
+        name: "ClewdR 2"
+        value_env: CLEWDR_2_PASSWORD
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0
+        enabled: true
+    network_config:
+      base_url: "http://clewdr-2:8484"
+      default_request_timeout_in_seconds: 120
+      max_retries: 0
+      retry_backoff_initial_ms: 0
+      retry_backoff_max_ms: 0
+      stream_idle_timeout_in_seconds: 120
+
+  clewdr-3:
+    description: "ClewdR instance 3"
+    custom_provider_config:
+      is_key_less: false
+      base_provider_type: "openai"
+    keys:
+      - id: clewdr-3-key
+        name: "ClewdR 3"
+        value_env: CLEWDR_3_PASSWORD
+        models:
+          - claude-sonnet-4-20250514
+          - claude-opus-4-20250514
+        weight: 1.0
+        enabled: true
+    network_config:
+      base_url: "http://clewdr-3:8484"
+      default_request_timeout_in_seconds: 120
+      max_retries: 0
+      retry_backoff_initial_ms: 0
+      retry_backoff_max_ms: 0
+      stream_idle_timeout_in_seconds: 120
