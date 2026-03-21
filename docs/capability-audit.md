@@ -1106,3 +1106,84 @@ type ClientConfig struct {
 - **Handler:** `getHealth` (health.go:32)
 - **Response:** `{"status": "ok", "components": {"db_pings": "ok"}}` or `{"db_pings": "disabled"}`
 - **Notes:** Pings config store, log store, and vector store concurrently with 10s timeout. Returns 503 if any store is unavailable. DB pings can be disabled via `DisableDBPingsInHealth` in ClientConfig.
+
+---
+
+## Control-Plane Gap Inventory
+
+This section catalogs every identified gap between what the control plane needs and what the upstream APIs currently provide. Each gap is classified using evidence from the capability audit above.
+
+### Gap Classification Criteria
+
+- **Solvable externally**: The upstream API already supports the operation needed. Evidence: a working endpoint exists and was verified in the audit sections above. The control plane can close this gap by writing scripts, config, or tooling that calls the existing API.
+- **Candidate patch**: No API, config, or environment variable surface achieves the operation. Evidence: the relevant source files were fully scanned and no handler or env var was found. Closing this gap would require modifying upstream source code (subject to the project's hard constraint against upstream modifications -- see CLAUDE.md).
+
+### Gap Table
+
+| # | Gap | Blocks Requirement | Classification | Phase Affected | Evidence |
+|---|-----|-------------------|----------------|---------------|----------|
+| 1 | New-API channel sync is create-only (no update/idempotent path) | SYNC-01 | solvable-externally | Phase 3 | PUT /api/channel/ exists (verified: controller/channel.go UpdateChannel handler) |
+| 2 | Model pricing requires Admin UI (no sync script) | SYNC-04 | solvable-externally | Phase 3 | PUT /api/option/ accepts key=ModelRatio (verified: controller/option.go UpdateOption handler) |
+| 3 | Bifrost routing rules require UI or restart for file-based sync | SYNC-03 | solvable-externally | Phase 3 | POST/PUT /api/governance/routing-rules exist (verified: governance.go handlers) |
+| 4 | ClewdR cookie rotation is manual (no automation script) | SYNC-05 | solvable-externally | Phase 3 | POST /api/cookie exists (verified: misc.rs api_post_cookie handler) |
+| 5 | New-API admin account requires browser on first boot | BOOT-01 | solvable-externally | Phase 5 | POST /api/setup exists (verified: controller/setup.go PostSetup, router/api-router.go line 22) |
+| 6 | No automated drift detection for Bifrost config | DRIFT-02 | solvable-externally | Phase 4 | GET /api/providers and GET /api/governance/routing-rules exist (verified: providers.go, governance.go) |
+| 7 | Fallback smoke test cannot disable providers programmatically | n/a (operational) | solvable-externally | Phase 5 | PUT /api/providers/{provider} supports enable/disable via Enabled field on Key struct |
+| 8 | ClewdR multi-instance registration in Bifrost has no verified automated path | SYNC-02, SYNC-03 | solvable-externally | Phase 3 | CustomProviderConfig with base_provider_type="openai" verified (core/schemas/provider.go:382-388); POST /api/providers accepts custom providers |
+| 9 | Bifrost config.json not mounted in docker-compose | BOOT-03 | solvable-externally | Phase 5 | Uncomment volume mount in deploy/docker-compose.yml (deploy config change, no code modification) |
+| 10 | generate-config.sh uses fragile bash YAML parsing | SYNC-01 | solvable-externally | Phase 3 | Replace with Go tool using yaml.v3 (no upstream change needed) |
+| 11 | Request correlation between New-API and Bifrost uses different header names | TRACE-01 | candidate-patch | Phase 6 | New-API uses X-Oneapi-Request-Id (common/constants.go:137); Bifrost reads x-request-id (lib/ctx.go:130). Header names do not match. |
+| 12 | No Bifrost routing rule sync script exists | SYNC-03 | solvable-externally | Phase 3 | Governance API verified: POST/PUT/DELETE /api/governance/routing-rules (governance.go) |
+| 13 | No model pricing sync script exists | SYNC-04 | solvable-externally | Phase 3 | PUT /api/option/ with key=ModelRatio verified (option.go) |
+| 14 | generate-config.sh produces provider array but Bifrost expects object keyed by provider name | SYNC-01 | solvable-externally | Phase 3 | Bifrost config.json providers section is object (verified: config.example.json, configstore/clientconfig.go) |
+
+### Gap Justifications
+
+**Gap 1: New-API channel sync is create-only**
+The existing `sync-newapi-channels.sh` script only calls `POST /api/channel/` (create). The audit verified that `PUT /api/channel/` exists in `new-api/controller/channel.go` (handler `UpdateChannel` at line 842) and accepts the `PatchChannel` struct which embeds `model.Channel`. The sync engine in Phase 3 should fetch existing channels via `GET /api/channel/`, match by name, and call PUT for updates. This is purely an external tooling gap -- the API surface is complete.
+
+**Gap 2: Model pricing requires Admin UI**
+The `PUT /api/option/` endpoint (RootAuth, `controller/option.go:105`) accepts `{"key":"ModelRatio","value":"{...}"}` and stores the JSON string in the options table. The audit documents all pricing-relevant option keys (ModelRatio, ModelPrice, CompletionRatio, CacheRatio, etc.). A sync script can read pricing from the YAML registry and call this endpoint. Phase 3 will implement `sync-newapi-pricing` as a Go module.
+
+**Gap 3: Bifrost routing rules require UI or restart**
+The Bifrost governance API provides full CRUD for routing rules: `POST /api/governance/routing-rules` (create), `PUT /api/governance/routing-rules/{id}` (update), `DELETE /api/governance/routing-rules/{id}` (delete). The `TableRoutingRule` struct is documented in the audit with all JSON fields. A sync script can manage rules via the live API without container restart. Phase 3 will add routing rule reconciliation to the sync engine.
+
+**Gap 4: ClewdR cookie rotation is manual**
+ClewdR's `POST /api/cookie` endpoint (RequireAdminAuth, `misc.rs:61`) accepts a `CookieStatus` JSON body with minimal required field `{"cookie":"<value>"}`. The audit confirms this endpoint adds cookies programmatically. A sync script that reads cookies from stdin or a secrets manager and POSTs them to each ClewdR instance eliminates the manual browser workflow. Phase 3 will implement this.
+
+**Gap 5: New-API admin account requires browser on first boot**
+**Classification changed from candidate-patch to solvable-externally.** The audit discovered `POST /api/setup` registered at `new-api/router/api-router.go:22`, handled by `controller.PostSetup` in `setup.go`. This endpoint accepts JSON: `{"username":"...","password":"...","confirmPassword":"...","SelfUseModeEnabled":false,"DemoSiteEnabled":false}`. It creates the root user (RoleRootUser) with 100M quota. The endpoint is only available before `constant.Setup` is true (first boot only). No env var seeding is needed -- the API endpoint itself is the machine-callable bootstrap path. Phase 5 bootstrap can call this endpoint directly.
+
+**Gap 6: No automated drift detection for Bifrost**
+The Bifrost API provides `GET /api/providers` (full provider list with config) and `GET /api/governance/routing-rules` (all routing rules). The audit documents both response shapes with struct definitions. A drift detection tool can fetch live state, compare against desired state YAML, and report differences. Phase 4 will implement this as a `starapihub diff` subcommand.
+
+**Gap 7: Fallback smoke test cannot disable providers programmatically**
+`PUT /api/providers/{provider}` is documented in the audit as full-replace (providers.go:321). The `Key` struct has an `Enabled *bool` field. To disable a provider for testing, the smoke script can fetch the current provider config, set all keys to `enabled: false`, and PUT the updated config. After the test, restore original state. Phase 5 will add this capability to the smoke test suite.
+
+**Gap 8: ClewdR multi-instance registration in Bifrost**
+**Classification: solvable-externally.** The audit verified that `CustomProviderConfig` (core/schemas/provider.go:382-388) with `base_provider_type: "openai"` allows registering non-standard providers. Each ClewdR instance becomes a separate custom provider (e.g., `clewdr-1`, `clewdr-2`) with its own `NetworkConfig.BaseURL` pointing to the instance URL. The `POST /api/providers` endpoint creates custom providers. The critical finding from Plan 02 is that Bifrost Keys do NOT have per-key `base_url` -- only `NetworkConfig` has `BaseURL` at the provider level -- so separate custom providers are the correct (and only) path. Phase 3 sync engine will register ClewdR instances as custom providers via the API.
+
+**Gap 9: Bifrost config.json not mounted in docker-compose**
+The volume mount in `deploy/docker-compose.yml` (lines 97-98) is commented out: `# - ../config/bifrost/config.json:/app/data/config.json:ro`. Uncommenting this and ensuring the config file is populated before first start is a deploy-time configuration change. No upstream code modification needed. Phase 5 bootstrap will handle this.
+
+**Gap 10: generate-config.sh uses fragile bash YAML parsing**
+The script at `scripts/sync/generate-config.sh` uses `grep -qE '^ {4,6}- id:'` patterns to parse YAML. It has no error handling for structural changes and silently produces wrong output. The fix is to replace it with a Go tool under `control-plane/cmd/generate-config/` that uses `gopkg.in/yaml.v3`. This is entirely external tooling -- no upstream changes. Phase 3 will implement the typed Go replacement.
+
+**Gap 11: Request correlation uses different header names**
+New-API generates `X-Oneapi-Request-Id` (defined in `common/constants.go:137`). Bifrost reads `x-request-id` (lowercase, in `lib/ctx.go:130`). These headers do not match, so end-to-end request correlation across New-API -> Bifrost is broken by default. **This is the only candidate-patch gap.** Options: (a) configure nginx to copy the header with `proxy_set_header x-request-id $request_id;` which works for nginx-originated IDs but not for New-API-originated ones, (b) add a New-API middleware or Bifrost middleware to bridge the header names, or (c) accept the limitation and document that correlation works at the nginx layer only. Phase 6 will evaluate whether an nginx header copy is sufficient or a minimal patch is needed.
+
+**Gap 12: No Bifrost routing rule sync script**
+The governance API is fully verified in the audit: `POST /api/governance/routing-rules` creates rules, `PUT /api/governance/routing-rules/{id}` updates them, `DELETE /api/governance/routing-rules/{id}` removes them. The `TableRoutingRule` struct with CEL expression support is documented. Phase 3 will implement routing rule reconciliation in the sync engine.
+
+**Gap 13: No model pricing sync script**
+`PUT /api/option/` with `key=ModelRatio` and a JSON-encoded string value is verified in the audit. The format is `{"key":"ModelRatio","value":"{\"model-name\":ratio}"}`. Phase 3 will implement a pricing sync module that reads pricing annotations from the YAML registry and calls this endpoint.
+
+**Gap 14: generate-config.sh produces wrong output format**
+The script outputs `"providers": [...]` (array) but Bifrost's `config.json` uses `"providers": {"anthropic":{...}, "openai":{...}}` (object keyed by ModelProvider name). This was confirmed by comparing the script output against the actual `config.example.json` and the `configstore/clientconfig.go` type definitions. The Go replacement in Phase 3 will produce the correct object format.
+
+### Gap Summary
+
+- Total gaps identified: 14
+- Solvable externally: 13 (93%)
+- Candidate patch: 1 (7%) -- Gap #11 (request correlation header mismatch)
+- Patch budget status: **Within budget** (target 0, acceptable 1-2). The single candidate patch (header bridging) may be avoidable via nginx configuration -- Phase 6 will determine if the nginx-only approach is sufficient.
