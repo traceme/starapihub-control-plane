@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/starapihub/dashboard/internal/audit"
 	"github.com/starapihub/dashboard/internal/drift"
 	"github.com/starapihub/dashboard/internal/registry"
 	"github.com/starapihub/dashboard/internal/sync"
@@ -30,6 +31,8 @@ func syncCmd() *cobra.Command {
 		prune    bool
 		failFast bool
 		target   string // comma-separated: "channels,providers"
+		auditLog string // --audit-log flag
+		noAudit  bool   // --no-audit flag
 	)
 
 	cmd := &cobra.Command{
@@ -37,6 +40,8 @@ func syncCmd() *cobra.Command {
 		Short: "Sync desired state to upstream systems",
 		Long:  "Reconcile desired-state YAML registries against live upstream systems (New-API, Bifrost, ClewdR). Creates, updates, and optionally deletes resources to match.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			syncStartTime := time.Now()
+
 			// 1. Load registry
 			reg, err := registry.LoadAll(configDir)
 			if err != nil {
@@ -107,7 +112,18 @@ func syncCmd() *cobra.Command {
 				return err
 			}
 
-			// 9. Format and print report
+			// 9. Audit logging
+			if !noAudit && !dryRun {
+				auditLogger := audit.NewLogger(auditLog)
+				auditDuration := time.Since(syncStartTime)
+				if auditErr := auditLogger.Write(report, "sync", targets, auditDuration); auditErr != nil {
+					if verbose {
+						fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: audit log write failed: %v\n", auditErr)
+					}
+				}
+			}
+
+			// 10. Format and print report
 			if output == "json" {
 				data, _ := sync.FormatJSONReport(report)
 				fmt.Fprintln(cmd.OutOrStdout(), string(data))
@@ -115,7 +131,7 @@ func syncCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), sync.FormatTextReport(report, verbose))
 			}
 
-			// 10. Exit code via error return
+			// 11. Exit code via error return
 			if report.Failed > 0 {
 				return fmt.Errorf("sync completed with %d failures", report.Failed)
 			}
@@ -127,6 +143,8 @@ func syncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&prune, "prune", false, "Delete resources not in desired state")
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Abort on first error")
 	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types to sync (e.g., channels,providers)")
+	cmd.Flags().StringVar(&auditLog, "audit-log", "", "Path to audit log file (default: ~/.starapihub/audit.log)")
+	cmd.Flags().BoolVar(&noAudit, "no-audit", false, "Disable audit logging")
 
 	return cmd
 }

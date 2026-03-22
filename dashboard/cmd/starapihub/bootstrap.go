@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/starapihub/dashboard/internal/audit"
 	"github.com/starapihub/dashboard/internal/bootstrap"
 	"github.com/starapihub/dashboard/internal/registry"
+	syncpkg "github.com/starapihub/dashboard/internal/sync"
 	"github.com/starapihub/dashboard/internal/upstream"
 )
 
@@ -21,6 +23,8 @@ func bootstrapCmd() *cobra.Command {
 		skipSeed bool
 		skipSync bool
 		dryRun   bool
+		auditLog string
+		noAudit  bool
 	)
 
 	cmd := &cobra.Command{
@@ -28,6 +32,8 @@ func bootstrapCmd() *cobra.Command {
 		Short: "Bootstrap a fresh environment from zero to healthy",
 		Long:  "Validate prerequisites, wait for services, seed admin account, sync all configuration, and verify health. Idempotent -- safe to re-run.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			bootStartTime := time.Now()
+
 			// Parse timeout
 			dur, err := time.ParseDuration(timeout)
 			if err != nil {
@@ -109,6 +115,19 @@ func bootstrapCmd() *cobra.Command {
 			defer cancel()
 			report := b.Run(ctx)
 
+			// Audit logging
+			if !noAudit && !dryRun {
+				auditLogger := audit.NewLogger(auditLog)
+				bootDuration := time.Since(bootStartTime)
+				// Bootstrap doesn't expose SyncReport directly; write a summary entry
+				simpleReport := &syncpkg.SyncReport{}
+				if auditErr := auditLogger.Write(simpleReport, "bootstrap", nil, bootDuration); auditErr != nil {
+					if verbose {
+						fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: audit log write failed: %v\n", auditErr)
+					}
+				}
+			}
+
 			// Format output
 			if output == "json" {
 				data, _ := json.MarshalIndent(report, "", "  ")
@@ -152,6 +171,8 @@ func bootstrapCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&skipSeed, "skip-seed", false, "Skip New-API admin seeding")
 	cmd.Flags().BoolVar(&skipSync, "skip-sync", false, "Skip sync and verification (validate + health only)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without making changes")
+	cmd.Flags().StringVar(&auditLog, "audit-log", "", "Path to audit log file (default: ~/.starapihub/audit.log)")
+	cmd.Flags().BoolVar(&noAudit, "no-audit", false, "Disable audit logging")
 
 	return cmd
 }
