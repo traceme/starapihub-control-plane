@@ -29,7 +29,7 @@ func buildRootCmd() *cobra.Command {
 	rootCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(diffCmd())
 	rootCmd.AddCommand(stubCmd("bootstrap", "Bootstrap a fresh environment"))
-	rootCmd.AddCommand(stubCmd("health", "Check health of all upstream systems"))
+	rootCmd.AddCommand(healthCmd())
 
 	return rootCmd
 }

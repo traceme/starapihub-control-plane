@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -108,8 +109,8 @@ func TestValidateCommandInvalid(t *testing.T) {
 }
 
 func TestStubCommands(t *testing.T) {
-	// Only bootstrap and health remain as stubs (sync and diff are now implemented)
-	for _, subcmd := range []string{"bootstrap", "health"} {
+	// Only bootstrap remains as a stub (sync, diff, health are now implemented)
+	for _, subcmd := range []string{"bootstrap"} {
 		t.Run(subcmd, func(t *testing.T) {
 			rootCmd := buildRootCmd()
 			buf := new(bytes.Buffer)
@@ -125,6 +126,32 @@ func TestStubCommands(t *testing.T) {
 				t.Errorf("expected 'not yet implemented' error for %s, got: %v", subcmd, err)
 			}
 		})
+	}
+}
+
+func TestHealthCommandNoEnv(t *testing.T) {
+	// Unset env vars to ensure health command runs with no services configured
+	for _, env := range []string{"NEWAPI_URL", "BIFROST_URL", "CLEWDR_URLS", "CLEWDR_ADMIN_TOKEN"} {
+		t.Setenv(env, "")
+	}
+
+	rootCmd := buildRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"health"})
+
+	err := rootCmd.Execute()
+	// Should return ExitError{Code: 1} since no services are configured/reachable
+	if err == nil {
+		t.Fatal("expected health command to return error when no env vars set")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got: %T: %v", err, err)
+	}
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.Code)
 	}
 }
 
