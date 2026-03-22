@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -35,6 +36,10 @@ func buildRootCmd() *cobra.Command {
 
 func main() {
 	if err := buildRootCmd().Execute(); err != nil {
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		os.Exit(2)
 	}
 }
