@@ -108,24 +108,71 @@ func TestValidateCommandInvalid(t *testing.T) {
 	}
 }
 
-func TestStubCommands(t *testing.T) {
-	// Only bootstrap remains as a stub (sync, diff, health are now implemented)
-	for _, subcmd := range []string{"bootstrap"} {
-		t.Run(subcmd, func(t *testing.T) {
-			rootCmd := buildRootCmd()
-			buf := new(bytes.Buffer)
-			rootCmd.SetOut(buf)
-			rootCmd.SetErr(buf)
-			rootCmd.SetArgs([]string{subcmd})
+func TestBootstrapDryRun(t *testing.T) {
+	// Set up env vars with dummy values
+	t.Setenv("NEWAPI_URL", "http://dummy:3000")
+	t.Setenv("NEWAPI_ADMIN_TOKEN", "tok")
+	t.Setenv("BIFROST_URL", "http://dummy:8080")
+	t.Setenv("CLEWDR_URLS", "http://dummy:8484")
+	t.Setenv("CLEWDR_ADMIN_TOKEN", "ctok")
 
-			err := rootCmd.Execute()
-			if err == nil {
-				t.Fatalf("expected stub command %s to return error", subcmd)
-			}
-			if !strings.Contains(err.Error(), "not yet implemented") {
-				t.Errorf("expected 'not yet implemented' error for %s, got: %v", subcmd, err)
-			}
-		})
+	// Create temp dir with minimal registry files
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "channels.yaml"), []byte("channels: {}"), 0644)
+	os.WriteFile(filepath.Join(dir, "providers.yaml"), []byte("providers: {}"), 0644)
+
+	rootCmd := buildRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"bootstrap", "--dry-run", "--skip-sync", "--config-dir", dir})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("bootstrap --dry-run should succeed, got: %v\noutput: %s", err, buf.String())
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Bootstrap Report") {
+		t.Errorf("expected output to contain 'Bootstrap Report', got: %s", output)
+	}
+	if !strings.Contains(output, "Bootstrap complete") {
+		t.Errorf("expected output to contain 'Bootstrap complete', got: %s", output)
+	}
+}
+
+func TestBootstrapMissingPrereqs(t *testing.T) {
+	// Unset all env vars
+	for _, env := range []string{"NEWAPI_URL", "NEWAPI_ADMIN_TOKEN", "BIFROST_URL", "CLEWDR_URLS", "CLEWDR_ADMIN_TOKEN"} {
+		t.Setenv(env, "")
+	}
+
+	dir := t.TempDir()
+	// No registry files either
+
+	rootCmd := buildRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"bootstrap", "--config-dir", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected bootstrap to fail when prereqs missing")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got: %T: %v", err, err)
+	}
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.Code)
+	}
+
+	// Output should contain actionable guidance
+	output := buf.String()
+	if !strings.Contains(output, "NEWAPI_URL") {
+		t.Errorf("expected output to contain NEWAPI_URL guidance, got: %s", output)
 	}
 }
 
