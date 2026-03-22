@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	syncpkg "github.com/starapihub/dashboard/internal/sync"
 )
 
 // --- Prereq Validation Tests ---
@@ -342,6 +345,325 @@ func TestCheckAllHealth(t *testing.T) {
 	}
 	if !foundBifrost {
 		t.Error("expected bifrost in statuses")
+	}
+}
+
+// --- Run Orchestration Tests ---
+
+// stubReconciler implements sync.Reconciler for testing.
+type stubReconciler struct {
+	name       string
+	planFunc   func(desired, live any) ([]syncpkg.Action, error)
+	applyFunc  func(action syncpkg.Action) (*syncpkg.Result, error)
+	verifyFunc func(action syncpkg.Action, result *syncpkg.Result) error
+}
+
+func (s *stubReconciler) Name() string { return s.name }
+func (s *stubReconciler) Plan(desired, live any) ([]syncpkg.Action, error) {
+	if s.planFunc != nil {
+		return s.planFunc(desired, live)
+	}
+	return nil, nil
+}
+func (s *stubReconciler) Apply(action syncpkg.Action) (*syncpkg.Result, error) {
+	if s.applyFunc != nil {
+		return s.applyFunc(action)
+	}
+	return &syncpkg.Result{Action: action, Status: syncpkg.StatusOK}, nil
+}
+func (s *stubReconciler) Verify(action syncpkg.Action, result *syncpkg.Result) error {
+	if s.verifyFunc != nil {
+		return s.verifyFunc(action, result)
+	}
+	return nil
+}
+
+func newPassingReconciler(name string, actionCount int) *stubReconciler {
+	return &stubReconciler{
+		name: name,
+		planFunc: func(desired, live any) ([]syncpkg.Action, error) {
+			var actions []syncpkg.Action
+			for i := 0; i < actionCount; i++ {
+				actions = append(actions, syncpkg.Action{
+					Type:         syncpkg.ActionCreate,
+					ResourceType: name,
+					ResourceID:   fmt.Sprintf("%s-%d", name, i),
+				})
+			}
+			return actions, nil
+		},
+	}
+}
+
+func newFailingReconciler(name string) *stubReconciler {
+	return &stubReconciler{
+		name: name,
+		planFunc: func(desired, live any) ([]syncpkg.Action, error) {
+			return nil, fmt.Errorf("plan failed for %s", name)
+		},
+	}
+}
+
+func makeBootstrapperWithHealthyServices(t *testing.T) (*Bootstrapper, func()) {
+	t.Helper()
+	newAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/setup" && r.Method == "POST" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"success":true,"message":"admin created"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	bifrost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	clewdr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "channels.yaml"), []byte("channels: {}"), 0644)
+	os.WriteFile(filepath.Join(dir, "providers.yaml"), []byte("providers: {}"), 0644)
+
+	b := New(BootstrapOptions{
+		NewAPIURL:        newAPI.URL,
+		NewAPIAdminToken: "tok",
+		BifrostURL:       bifrost.URL,
+		ClewdRURLs:       []string{clewdr.URL},
+		ClewdRAdminToken: "ctok",
+		ConfigDir:        dir,
+		AdminUsername:    "root",
+		AdminPassword:    "testpass",
+		Timeout:          5 * time.Second,
+	})
+
+	cleanup := func() {
+		newAPI.Close()
+		bifrost.Close()
+		clewdr.Close()
+	}
+	return b, cleanup
+}
+
+func TestRunCallsAllStepsInOrder(t *testing.T) {
+	b, cleanup := makeBootstrapperWithHealthyServices(t)
+	defer cleanup()
+
+	// Set up sync deps with a passing reconciler
+	rec := newPassingReconciler("provider", 2)
+	b.SetSyncDeps(SyncDeps{
+		Reconcilers:  []syncpkg.Reconciler{rec},
+		DesiredState: map[string]any{"provider": nil},
+		LiveState:    map[string]any{"provider": nil},
+	})
+
+	ctx := context.Background()
+	report := b.Run(ctx)
+
+	if !report.Success {
+		t.Fatalf("expected success, got failure. Steps: %+v", report.Steps)
+	}
+
+	// Should have 5 steps: validate-prereqs, wait-services, seed-admin, run-sync, verify-health
+	if len(report.Steps) != 5 {
+		t.Fatalf("expected 5 steps, got %d: %+v", len(report.Steps), report.Steps)
+	}
+
+	expectedNames := []string{"validate-prereqs", "wait-services", "seed-admin", "run-sync", "verify-health"}
+	for i, name := range expectedNames {
+		if report.Steps[i].Name != name {
+			t.Errorf("step %d: expected name %q, got %q", i, name, report.Steps[i].Name)
+		}
+	}
+}
+
+func TestRunStopsOnFailedStep(t *testing.T) {
+	// Create a bootstrapper with missing prereqs to trigger early failure
+	b := New(BootstrapOptions{
+		// Missing env vars -- validate-prereqs will fail
+		ConfigDir: t.TempDir(),
+	})
+
+	ctx := context.Background()
+	report := b.Run(ctx)
+
+	if report.Success {
+		t.Fatal("expected failure when prereqs missing")
+	}
+	if len(report.Steps) != 1 {
+		t.Fatalf("expected 1 step (stopped at prereqs), got %d", len(report.Steps))
+	}
+	if report.Steps[0].Status != "failed" {
+		t.Errorf("expected first step to be failed, got %s", report.Steps[0].Status)
+	}
+}
+
+func TestRunSkipSeed(t *testing.T) {
+	b, cleanup := makeBootstrapperWithHealthyServices(t)
+	defer cleanup()
+	b.opts.SkipSeed = true
+
+	b.SetSyncDeps(SyncDeps{
+		Reconcilers:  []syncpkg.Reconciler{newPassingReconciler("provider", 1)},
+		DesiredState: map[string]any{"provider": nil},
+		LiveState:    map[string]any{"provider": nil},
+	})
+
+	ctx := context.Background()
+	report := b.Run(ctx)
+
+	if !report.Success {
+		t.Fatalf("expected success, got failure: %+v", report.Steps)
+	}
+
+	// Find seed-admin step
+	for _, step := range report.Steps {
+		if step.Name == "seed-admin" {
+			if step.Status != "skipped" {
+				t.Errorf("expected seed-admin to be skipped, got %s: %s", step.Status, step.Message)
+			}
+			if !strings.Contains(step.Message, "skip-seed") {
+				t.Errorf("expected skip-seed message, got: %s", step.Message)
+			}
+			return
+		}
+	}
+	t.Error("seed-admin step not found in report")
+}
+
+func TestRunSkipSync(t *testing.T) {
+	b, cleanup := makeBootstrapperWithHealthyServices(t)
+	defer cleanup()
+	b.opts.SkipSync = true
+
+	ctx := context.Background()
+	report := b.Run(ctx)
+
+	if !report.Success {
+		t.Fatalf("expected success, got failure: %+v", report.Steps)
+	}
+
+	// Both run-sync and verify-health should be skipped
+	syncFound, verifyFound := false, false
+	for _, step := range report.Steps {
+		if step.Name == "run-sync" {
+			syncFound = true
+			if step.Status != "skipped" {
+				t.Errorf("expected run-sync to be skipped, got %s", step.Status)
+			}
+		}
+		if step.Name == "verify-health" {
+			verifyFound = true
+			if step.Status != "skipped" {
+				t.Errorf("expected verify-health to be skipped, got %s", step.Status)
+			}
+		}
+	}
+	if !syncFound {
+		t.Error("run-sync step not found")
+	}
+	if !verifyFound {
+		t.Error("verify-health step not found")
+	}
+}
+
+func TestRunDryRun(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "channels.yaml"), []byte("channels: {}"), 0644)
+	os.WriteFile(filepath.Join(dir, "providers.yaml"), []byte("providers: {}"), 0644)
+
+	b := New(BootstrapOptions{
+		NewAPIURL:        "http://dummy:3000",
+		NewAPIAdminToken: "tok",
+		BifrostURL:       "http://dummy:8080",
+		ClewdRURLs:       []string{"http://dummy:8484"},
+		ClewdRAdminToken: "ctok",
+		ConfigDir:        dir,
+		DryRun:           true,
+	})
+
+	ctx := context.Background()
+	report := b.Run(ctx)
+
+	if !report.Success {
+		t.Fatalf("expected dry-run success, got failure: %+v", report.Steps)
+	}
+
+	// wait-services, seed-admin, verify-health should all be skipped in dry-run
+	for _, step := range report.Steps {
+		if step.Name == "wait-services" || step.Name == "seed-admin" || step.Name == "verify-health" {
+			if step.Status != "skipped" {
+				t.Errorf("expected %s to be skipped in dry-run, got %s", step.Name, step.Status)
+			}
+		}
+	}
+}
+
+func TestBootstrapReportSuccess(t *testing.T) {
+	report := &BootstrapReport{Success: true}
+	report.AddStep(&StepResult{Name: "step1", Status: "ok"})
+	report.AddStep(&StepResult{Name: "step2", Status: "ok"})
+
+	if !report.Success {
+		t.Error("expected success when all steps ok")
+	}
+	if len(report.Steps) != 2 {
+		t.Errorf("expected 2 steps, got %d", len(report.Steps))
+	}
+}
+
+func TestBootstrapReportFailure(t *testing.T) {
+	report := &BootstrapReport{Success: true}
+	report.AddStep(&StepResult{Name: "step1", Status: "ok"})
+	report.AddStep(&StepResult{Name: "step2", Status: "failed"})
+
+	if report.Success {
+		t.Error("expected failure when a step failed")
+	}
+}
+
+func TestRunSyncSuccess(t *testing.T) {
+	b, cleanup := makeBootstrapperWithHealthyServices(t)
+	defer cleanup()
+
+	rec := newPassingReconciler("provider", 3)
+	b.SetSyncDeps(SyncDeps{
+		Reconcilers:  []syncpkg.Reconciler{rec},
+		DesiredState: map[string]any{"provider": nil},
+		LiveState:    map[string]any{"provider": nil},
+	})
+
+	result := b.RunSync()
+	if result.Status != "ok" {
+		t.Fatalf("expected ok, got %s: %s", result.Status, result.Message)
+	}
+	if result.Name != "run-sync" {
+		t.Errorf("expected name run-sync, got %s", result.Name)
+	}
+	if !strings.Contains(result.Message, "synced") {
+		t.Errorf("expected message to contain resource count, got: %s", result.Message)
+	}
+}
+
+func TestRunSyncNoDeps(t *testing.T) {
+	b := New(BootstrapOptions{})
+	result := b.RunSync()
+	if result.Status != "failed" {
+		t.Fatalf("expected failed when no sync deps, got %s", result.Status)
+	}
+}
+
+func TestVerifyHealthAllHealthy(t *testing.T) {
+	b, cleanup := makeBootstrapperWithHealthyServices(t)
+	defer cleanup()
+
+	// No sync deps -- just checks service health
+	result := b.VerifyHealth()
+	if result.Status != "ok" {
+		t.Fatalf("expected ok, got %s: %s", result.Status, result.Message)
+	}
+	if !strings.Contains(result.Message, "healthy") {
+		t.Errorf("expected message to mention healthy, got: %s", result.Message)
 	}
 }
 
