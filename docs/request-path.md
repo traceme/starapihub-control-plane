@@ -21,10 +21,11 @@
 
 **Headers injected by Nginx**:
 ```
-X-Request-ID: <uuid>          # If not already present
-X-Real-IP: <client-ip>        # Original client IP
-X-Forwarded-For: <client-ip>  # Standard forwarded header
-X-Forwarded-Proto: https      # Original protocol
+X-Request-ID: <uuid>              # If not already present
+X-Oneapi-Request-Id: <uuid>       # Same ID in New-API's header format
+X-Real-IP: <client-ip>            # Original client IP
+X-Forwarded-For: <client-ip>      # Standard forwarded header
+X-Forwarded-Proto: https          # Original protocol
 ```
 
 ### 2. Nginx -> New-API (Auth + Billing)
@@ -98,7 +99,11 @@ To trace a request end-to-end across all layers:
 
 To correlate: search all log sources for the same `X-Request-ID`.
 
-> **NOTE**: Whether New-API and Bifrost actually forward and log `X-Request-ID` depends on their implementations. If they don't natively support it, correlation must use timestamp + model + approximate request matching. This is a known limitation of the no-source-modification constraint.
+> **Verified behavior** (see docs/observability.md for source citations):
+> - Nginx generates X-Request-ID and forwards it as both `X-Request-ID` and `X-Oneapi-Request-Id`
+> - New-API generates its own internal ID (`X-Oneapi-Request-Id` in response), ignoring incoming headers
+> - Bifrost reads `x-request-id` from the request or generates a UUID
+> - Cross-layer correlation requires matching by timestamp + model when IDs diverge
 
 ## Failure Modes
 
