@@ -163,6 +163,34 @@ func (c *NewAPIClient) GetOptions(adminToken string) (json.RawMessage, error) {
 	return json.RawMessage(body), nil
 }
 
+// SetupAdmin calls POST /api/setup to create the initial admin user.
+// Returns the response body (contains token) on success.
+// Returns error on network failure or unexpected status codes.
+func (c *NewAPIClient) SetupAdmin(username, password string) (json.RawMessage, error) {
+	payload, err := json.Marshal(map[string]string{"username": username, "password": password})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", c.baseURL+"/api/setup", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("setup admin: status %d: %s", resp.StatusCode, string(body))
+	}
+	return json.RawMessage(body), nil
+}
+
 // --- Typed methods for sync engine ---
 
 // ListChannelsTyped fetches all channels with pagination, returning typed structs.
