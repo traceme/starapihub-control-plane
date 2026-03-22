@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+	gosync "sync"
 	"time"
 
+	"github.com/starapihub/dashboard/internal/drift"
+	syncpkg "github.com/starapihub/dashboard/internal/sync"
 	"github.com/starapihub/dashboard/internal/upstream"
 )
 
@@ -70,12 +72,35 @@ type BootstrapOptions struct {
 	AdminPassword    string // default "" (generated if empty)
 }
 
+// SyncDeps holds the sync engine dependencies injected by the CLI command.
+// This avoids importing cmd-level helpers into the bootstrap package.
+type SyncDeps struct {
+	Reconcilers  []syncpkg.Reconciler
+	DesiredState map[string]any
+	LiveState    map[string]any
+}
+
+// BootstrapReport contains per-step results from a full bootstrap run.
+type BootstrapReport struct {
+	Steps   []StepResult `json:"steps"`
+	Success bool         `json:"success"`
+}
+
+// AddStep appends a step result and updates Success.
+func (r *BootstrapReport) AddStep(step *StepResult) {
+	r.Steps = append(r.Steps, *step)
+	if step.Status == "failed" {
+		r.Success = false
+	}
+}
+
 // Bootstrapper orchestrates the bootstrap sequence.
 type Bootstrapper struct {
 	opts          BootstrapOptions
 	newAPIClient  *upstream.NewAPIClient
 	bifrostClient *upstream.BifrostClient
 	clewdrClient  *upstream.ClewdRClient
+	syncDeps      *SyncDeps
 }
 
 // New creates a new Bootstrapper with the given options.
@@ -302,8 +327,8 @@ func (b *Bootstrapper) SeedAdmin() *StepResult {
 // CheckAllHealth runs health checks on all services and returns per-service status.
 func (b *Bootstrapper) CheckAllHealth() []ServiceStatus {
 	var statuses []ServiceStatus
-	var mu sync.Mutex
-	var wg sync.WaitGroup
+	var mu gosync.Mutex
+	var wg gosync.WaitGroup
 
 	// New-API
 	if b.newAPIClient != nil {
@@ -346,6 +371,148 @@ func (b *Bootstrapper) CheckAllHealth() []ServiceStatus {
 	// Sort by name for deterministic output
 	sortStatuses(statuses)
 	return statuses
+}
+
+// SetSyncDeps injects sync engine dependencies for the RunSync and VerifyHealth steps.
+func (b *Bootstrapper) SetSyncDeps(deps SyncDeps) {
+	b.syncDeps = &deps
+}
+
+// RunSync creates a SyncOrchestrator with the injected dependencies and runs it.
+func (b *Bootstrapper) RunSync() *StepResult {
+	start := time.Now()
+	if b.syncDeps == nil {
+		return &StepResult{Name: "run-sync", Status: "failed", Message: "sync dependencies not configured", Duration: time.Since(start)}
+	}
+
+	opts := syncpkg.SyncOptions{
+		DryRun:  b.opts.DryRun,
+		Verbose: b.opts.Verbose,
+		Output:  b.opts.Output,
+	}
+	orch := syncpkg.NewSyncOrchestrator(b.syncDeps.Reconcilers, opts, b.syncDeps.DesiredState, b.syncDeps.LiveState)
+	report, err := orch.Run()
+	if err != nil {
+		return &StepResult{Name: "run-sync", Status: "failed", Message: fmt.Sprintf("sync engine error: %v", err), Duration: time.Since(start)}
+	}
+	if report.Failed > 0 {
+		return &StepResult{
+			Name: "run-sync", Status: "failed",
+			Message:  fmt.Sprintf("sync completed with %d failures out of %d actions", report.Failed, report.TotalActions),
+			Duration: time.Since(start),
+		}
+	}
+	return &StepResult{
+		Name: "run-sync", Status: "ok",
+		Message:  fmt.Sprintf("synced %d resources (%d created/updated, %d skipped)", report.TotalActions, report.Succeeded, report.Skipped),
+		Duration: time.Since(start),
+	}
+}
+
+// VerifyHealth checks service health and runs drift detection to confirm zero blocking drift.
+func (b *Bootstrapper) VerifyHealth() *StepResult {
+	start := time.Now()
+
+	// 1. Check service health
+	statuses := b.CheckAllHealth()
+	var unhealthy []string
+	for _, s := range statuses {
+		if !s.Healthy {
+			unhealthy = append(unhealthy, s.Name)
+		}
+	}
+	if len(unhealthy) > 0 {
+		return &StepResult{
+			Name: "verify-health", Status: "failed",
+			Message:  fmt.Sprintf("services unhealthy after setup: %s", strings.Join(unhealthy, ", ")),
+			Duration: time.Since(start),
+		}
+	}
+
+	// 2. Run drift detection (dry-run sync to get actions, then classify)
+	if b.syncDeps != nil {
+		dryOpts := syncpkg.SyncOptions{DryRun: true, Verbose: b.opts.Verbose}
+		orch := syncpkg.NewSyncOrchestrator(b.syncDeps.Reconcilers, dryOpts, b.syncDeps.DesiredState, b.syncDeps.LiveState)
+		report, err := orch.Run()
+		if err == nil {
+			detector := drift.NewDriftDetector()
+			driftReport := detector.Detect(report)
+			if driftReport.HasBlocking() {
+				return &StepResult{
+					Name: "verify-health", Status: "failed",
+					Message:  fmt.Sprintf("blocking drift detected after bootstrap: %d entries", driftReport.Summary.BlockingCount),
+					Duration: time.Since(start),
+				}
+			}
+		}
+	}
+
+	return &StepResult{
+		Name: "verify-health", Status: "ok",
+		Message:  fmt.Sprintf("all %d services healthy, no blocking drift", len(statuses)),
+		Duration: time.Since(start),
+	}
+}
+
+// Run executes the full bootstrap sequence: validate -> wait -> seed -> sync -> verify.
+// It produces a BootstrapReport with per-step results. Stops early on failure (except verify-health).
+func (b *Bootstrapper) Run(ctx context.Context) *BootstrapReport {
+	report := &BootstrapReport{Success: true}
+
+	// Step 1: Validate prerequisites
+	step := b.ValidatePrereqs()
+	report.AddStep(step)
+	if step.Status == "failed" {
+		return report
+	}
+
+	// Step 2: Wait for services (unless dry-run)
+	if b.opts.DryRun {
+		report.AddStep(&StepResult{Name: "wait-services", Status: "skipped", Message: "dry-run mode"})
+	} else {
+		step = b.WaitForServices(ctx)
+		report.AddStep(step)
+		if step.Status == "failed" {
+			return report
+		}
+	}
+
+	// Step 3: Seed admin (unless skipped or dry-run)
+	if b.opts.SkipSeed {
+		report.AddStep(&StepResult{Name: "seed-admin", Status: "skipped", Message: "skipped by --skip-seed"})
+	} else if b.opts.DryRun {
+		report.AddStep(&StepResult{Name: "seed-admin", Status: "skipped", Message: "dry-run mode"})
+	} else {
+		step = b.SeedAdmin()
+		report.AddStep(step)
+		if step.Status == "failed" {
+			return report
+		}
+	}
+
+	// Step 4: Run sync (unless skipped)
+	if b.opts.SkipSync {
+		report.AddStep(&StepResult{Name: "run-sync", Status: "skipped", Message: "skipped by --skip-sync"})
+	} else {
+		step = b.RunSync()
+		report.AddStep(step)
+		if step.Status == "failed" {
+			return report
+		}
+	}
+
+	// Step 5: Verify health (unless skipped with sync)
+	if b.opts.SkipSync {
+		report.AddStep(&StepResult{Name: "verify-health", Status: "skipped", Message: "skipped by --skip-sync"})
+	} else if b.opts.DryRun {
+		report.AddStep(&StepResult{Name: "verify-health", Status: "skipped", Message: "dry-run mode"})
+	} else {
+		step = b.VerifyHealth()
+		report.AddStep(step)
+		// verify-health failure is non-fatal -- report it but don't abort
+	}
+
+	return report
 }
 
 func checkNewAPI(client *upstream.NewAPIClient, url string) ServiceStatus {

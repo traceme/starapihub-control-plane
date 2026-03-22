@@ -449,8 +449,8 @@ func TestRunCallsAllStepsInOrder(t *testing.T) {
 	b, cleanup := makeBootstrapperWithHealthyServices(t)
 	defer cleanup()
 
-	// Set up sync deps with a passing reconciler
-	rec := newPassingReconciler("provider", 2)
+	// Set up sync deps with a no-op reconciler (no actions = no drift)
+	rec := &stubReconciler{name: "provider"}
 	b.SetSyncDeps(SyncDeps{
 		Reconcilers:  []syncpkg.Reconciler{rec},
 		DesiredState: map[string]any{"provider": nil},
@@ -459,10 +459,6 @@ func TestRunCallsAllStepsInOrder(t *testing.T) {
 
 	ctx := context.Background()
 	report := b.Run(ctx)
-
-	if !report.Success {
-		t.Fatalf("expected success, got failure. Steps: %+v", report.Steps)
-	}
 
 	// Should have 5 steps: validate-prereqs, wait-services, seed-admin, run-sync, verify-health
 	if len(report.Steps) != 5 {
@@ -474,6 +470,10 @@ func TestRunCallsAllStepsInOrder(t *testing.T) {
 		if report.Steps[i].Name != name {
 			t.Errorf("step %d: expected name %q, got %q", i, name, report.Steps[i].Name)
 		}
+	}
+
+	if !report.Success {
+		t.Errorf("expected success when all steps pass, got failure. Steps: %+v", report.Steps)
 	}
 }
 
@@ -503,8 +503,10 @@ func TestRunSkipSeed(t *testing.T) {
 	defer cleanup()
 	b.opts.SkipSeed = true
 
+	// Use no-op reconciler to avoid drift in verify-health
+	rec := &stubReconciler{name: "provider"}
 	b.SetSyncDeps(SyncDeps{
-		Reconcilers:  []syncpkg.Reconciler{newPassingReconciler("provider", 1)},
+		Reconcilers:  []syncpkg.Reconciler{rec},
 		DesiredState: map[string]any{"provider": nil},
 		LiveState:    map[string]any{"provider": nil},
 	})
@@ -582,6 +584,14 @@ func TestRunDryRun(t *testing.T) {
 		DryRun:           true,
 	})
 
+	// Set sync deps so RunSync has something to work with in dry-run mode
+	rec := newPassingReconciler("provider", 2)
+	b.SetSyncDeps(SyncDeps{
+		Reconcilers:  []syncpkg.Reconciler{rec},
+		DesiredState: map[string]any{"provider": nil},
+		LiveState:    map[string]any{"provider": nil},
+	})
+
 	ctx := context.Background()
 	report := b.Run(ctx)
 
@@ -594,6 +604,15 @@ func TestRunDryRun(t *testing.T) {
 		if step.Name == "wait-services" || step.Name == "seed-admin" || step.Name == "verify-health" {
 			if step.Status != "skipped" {
 				t.Errorf("expected %s to be skipped in dry-run, got %s", step.Name, step.Status)
+			}
+		}
+	}
+
+	// run-sync should run (in dry-run mode, actions are skipped by orchestrator)
+	for _, step := range report.Steps {
+		if step.Name == "run-sync" {
+			if step.Status != "ok" {
+				t.Errorf("expected run-sync ok (dry-run), got %s: %s", step.Status, step.Message)
 			}
 		}
 	}
