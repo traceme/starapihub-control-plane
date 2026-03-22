@@ -30,6 +30,7 @@ func buildRootCmd() *cobra.Command {
 	rootCmd.AddCommand(diffCmd())
 	rootCmd.AddCommand(bootstrapCmd())
 	rootCmd.AddCommand(healthCmd())
+	rootCmd.AddCommand(traceCmd())
 
 	return rootCmd
 }
