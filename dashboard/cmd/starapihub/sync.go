@@ -8,10 +8,21 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/starapihub/dashboard/internal/drift"
 	"github.com/starapihub/dashboard/internal/registry"
 	"github.com/starapihub/dashboard/internal/sync"
 	"github.com/starapihub/dashboard/internal/upstream"
 )
+
+// ExitError is a sentinel error that carries a specific exit code.
+// Used by diffCmd to signal severity-based exit codes to main().
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit code %d", e.Code)
+}
 
 func syncCmd() *cobra.Command {
 	var (
@@ -121,16 +132,158 @@ func syncCmd() *cobra.Command {
 }
 
 func diffCmd() *cobra.Command {
-	// diff is sync --dry-run
-	cmd := syncCmd()
-	cmd.Use = "diff"
-	cmd.Short = "Show drift between desired and actual state"
-	cmd.Long = "Alias for 'sync --dry-run'. Reads live state from upstreams and shows what sync would change."
-	// Force dry-run
-	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		return cmd.Flags().Set("dry-run", "true")
+	var (
+		target     string // comma-separated resource types
+		severity   string // minimum severity to display
+		exitWarn   bool   // treat warnings as exit 0
+		reportFile string // write JSON report to file
+	)
+
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Show drift between desired and actual state",
+		Long:  "Detect and classify drift between desired-state YAML registries and live upstream systems. Produces severity-tagged output suitable for CI pipelines.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// 1. Load registry
+			reg, err := registry.LoadAll(configDir)
+			if err != nil {
+				return fmt.Errorf("load registry: %w", err)
+			}
+
+			// 2. Read connection config from env vars
+			newAPIURL := os.Getenv("NEWAPI_URL")
+			if newAPIURL == "" {
+				return fmt.Errorf("NEWAPI_URL environment variable required")
+			}
+			newAPIToken := os.Getenv("NEWAPI_ADMIN_TOKEN")
+			if newAPIToken == "" {
+				return fmt.Errorf("NEWAPI_ADMIN_TOKEN environment variable required")
+			}
+			bifrostURL := os.Getenv("BIFROST_URL")
+			if bifrostURL == "" {
+				return fmt.Errorf("BIFROST_URL environment variable required")
+			}
+			clewdrURLsStr := os.Getenv("CLEWDR_URLS")
+			clewdrToken := os.Getenv("CLEWDR_ADMIN_TOKEN")
+			var clewdrURLs []string
+			if clewdrURLsStr != "" {
+				clewdrURLs = strings.Split(clewdrURLsStr, ",")
+				for i := range clewdrURLs {
+					clewdrURLs[i] = strings.TrimSpace(clewdrURLs[i])
+				}
+			}
+
+			// 3. Parse targets
+			var targets []string
+			if target != "" {
+				targets = strings.Split(target, ",")
+				for i := range targets {
+					targets[i] = strings.TrimSpace(targets[i])
+				}
+			}
+
+			// 4. Create upstream clients
+			httpClient := &http.Client{Timeout: 30 * time.Second}
+			newAPIClient := upstream.NewNewAPIClient(httpClient, newAPIURL)
+			bifrostClient := upstream.NewBifrostClient(httpClient, bifrostURL)
+			clewdrClient := upstream.NewClewdRClient(httpClient)
+
+			// 5. Build sync options (always dry-run for diff)
+			opts := sync.SyncOptions{
+				DryRun:  true,
+				Verbose: verbose,
+				Targets: targets,
+				Output:  output,
+			}
+
+			// 6. Build reconcilers, desired state, live state
+			reconcilers := buildReconcilers(reg, newAPIClient, newAPIToken, bifrostClient, clewdrClient, clewdrURLs, clewdrToken, false)
+			desiredState := buildDesiredState(reg)
+			liveState := fetchLiveState(newAPIClient, newAPIToken, bifrostClient, clewdrClient, clewdrURLs, clewdrToken, verbose)
+
+			// 7. Run sync in dry-run mode to get SyncReport
+			orch := sync.NewSyncOrchestrator(reconcilers, opts, desiredState, liveState)
+			report, err := orch.Run()
+			if err != nil {
+				return err
+			}
+
+			// 8. Run drift detection
+			detector := drift.NewDriftDetector()
+			driftReport := detector.Detect(report)
+			driftReport.DesiredStateDir = configDir
+
+			// 9. Apply severity filter
+			displayReport := applySeverityFilter(driftReport, severity)
+			displayVerbose := resolveVerbose(verbose, severity)
+
+			// 10. Format output
+			var formatted string
+			if output == "json" {
+				data, jsonErr := drift.FormatJSONDriftReport(displayReport, displayVerbose)
+				if jsonErr != nil {
+					return fmt.Errorf("format JSON: %w", jsonErr)
+				}
+				formatted = string(data)
+			} else {
+				formatted = drift.FormatTextDriftReport(displayReport, displayVerbose)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), formatted)
+
+			// 11. Write report file if requested (always JSON)
+			if reportFile != "" {
+				data, jsonErr := drift.FormatJSONDriftReport(driftReport, true)
+				if jsonErr != nil {
+					return fmt.Errorf("format report file: %w", jsonErr)
+				}
+				if writeErr := os.WriteFile(reportFile, data, 0644); writeErr != nil {
+					return fmt.Errorf("write report file: %w", writeErr)
+				}
+			}
+
+			// 12. Determine exit code based on severity
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			if driftReport.HasBlocking() {
+				return &ExitError{Code: 2}
+			}
+			if driftReport.HasWarning() && !exitWarn {
+				return &ExitError{Code: 1}
+			}
+			return nil
+		},
 	}
+
+	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types to check (e.g., channels,providers)")
+	cmd.Flags().StringVar(&severity, "severity", "warning", "Minimum severity to display: informational, warning, blocking")
+	cmd.Flags().BoolVar(&exitWarn, "exit-warn", false, "Treat warnings as exit 0 (lenient mode for CI)")
+	cmd.Flags().StringVar(&reportFile, "report-file", "", "Write full JSON drift report to file")
+
 	return cmd
+}
+
+// applySeverityFilter returns a filtered copy of the drift report if needed.
+func applySeverityFilter(report *drift.DriftReport, severity string) *drift.DriftReport {
+	switch drift.DriftSeverity(severity) {
+	case drift.SeverityBlocking:
+		filtered := *report
+		filtered.Entries = report.FilterBySeverity(drift.SeverityBlocking)
+		return &filtered
+	default:
+		return report
+	}
+}
+
+// resolveVerbose determines the verbose flag to pass to formatters based on severity.
+func resolveVerbose(verbose bool, severity string) bool {
+	switch drift.DriftSeverity(severity) {
+	case drift.SeverityInformational:
+		return true
+	case drift.SeverityBlocking:
+		return true
+	default:
+		return verbose
+	}
 }
 
 // buildReconcilers creates all 6 reconcilers in dependency order.
