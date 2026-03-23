@@ -72,12 +72,17 @@ func syncCmd() *cobra.Command {
 				}
 			}
 
-			// 3. Parse targets
+			// 3. Parse and normalize targets
 			var targets []string
 			if target != "" {
-				targets = strings.Split(target, ",")
-				for i := range targets {
-					targets[i] = strings.TrimSpace(targets[i])
+				raw := strings.Split(target, ",")
+				for i := range raw {
+					raw[i] = strings.TrimSpace(raw[i])
+				}
+				var normErr error
+				targets, normErr = sync.NormalizeTargets(raw)
+				if normErr != nil {
+					return normErr
 				}
 			}
 
@@ -142,7 +147,7 @@ func syncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would change without applying")
 	cmd.Flags().BoolVar(&prune, "prune", false, "Delete resources not in desired state")
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Abort on first error")
-	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types to sync (e.g., channels,providers)")
+	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types (channel,provider,config,routing-rule,pricing,cookie)")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "Path to audit log file (default: ~/.starapihub/audit.log)")
 	cmd.Flags().BoolVar(&noAudit, "no-audit", false, "Disable audit logging")
 
@@ -191,12 +196,17 @@ func diffCmd() *cobra.Command {
 				}
 			}
 
-			// 3. Parse targets
+			// 3. Parse and normalize targets
 			var targets []string
 			if target != "" {
-				targets = strings.Split(target, ",")
-				for i := range targets {
-					targets[i] = strings.TrimSpace(targets[i])
+				raw := strings.Split(target, ",")
+				for i := range raw {
+					raw[i] = strings.TrimSpace(raw[i])
+				}
+				var normErr error
+				targets, normErr = sync.NormalizeTargets(raw)
+				if normErr != nil {
+					return normErr
 				}
 			}
 
@@ -272,7 +282,7 @@ func diffCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types to check (e.g., channels,providers)")
+	cmd.Flags().StringVar(&target, "target", "", "Comma-separated resource types (channel,provider,config,routing-rule,pricing,cookie)")
 	cmd.Flags().StringVar(&severity, "severity", "warning", "Minimum severity to display: informational, warning, blocking")
 	cmd.Flags().BoolVar(&exitWarn, "exit-warn", false, "Treat warnings as exit 0 (lenient mode for CI)")
 	cmd.Flags().StringVar(&reportFile, "report-file", "", "Write full JSON drift report to file")

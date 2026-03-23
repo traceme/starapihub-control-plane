@@ -134,38 +134,36 @@ For the stricter commercial-appliance target, a tiny upstream patch set is allow
    - `policies/route-policies.yaml`
    - `policies/provider-pools.yaml`
 
-2. Generate Bifrost config from the registry:
+2. Validate the registries:
    ```bash
-   bash scripts/sync/generate-config.sh
+   starapihub validate
    ```
-   Compare the generated `config/bifrost/config.json` with the running Bifrost config. Resolve differences.
 
-3. Test the New-API sync script:
+3. Preview sync changes:
    ```bash
-   bash scripts/sync/sync-newapi-channels.sh --dry-run
+   starapihub sync --dry-run
    ```
    Review proposed changes, then apply:
    ```bash
-   bash scripts/sync/sync-newapi-channels.sh
+   starapihub sync
    ```
 
 4. Verify that the synced configuration matches what was manually set in Phase 1.
 
-5. Destroy and recreate the stack from scratch using only the registries and scripts (no manual UI steps except ClewdR cookies):
+5. Destroy and recreate the stack from scratch using bootstrap:
    ```bash
    docker-compose down -v
    docker-compose --env-file env/common.env up -d
-   # Wait for health...
-   bash scripts/sync/sync-newapi-channels.sh
-   # Add ClewdR cookies manually
-   bash scripts/smoke/run-all.sh
+   # Bootstrap: validates prereqs, waits for services, seeds admin, syncs all config, verifies health
+   starapihub bootstrap
+   # Verify no drift
+   starapihub diff
    ```
 
 ### Exit Criteria
-- [ ] Stack can be fully deployed from config files and scripts (plus manual ClewdR cookie entry)
-- [ ] `generate-config.sh` output matches running config
-- [ ] `sync-newapi-channels.sh` creates correct channels
-- [ ] Full smoke test suite passes after scripted deploy
+- [ ] Stack can be fully deployed with `docker-compose up -d` + `starapihub bootstrap`
+- [ ] `starapihub diff` shows no blocking drift after bootstrap
+- [ ] Full smoke test suite passes after CLI-driven deploy
 - [ ] Policy registries are the single source of truth — no undocumented manual config
 
 ## Phase 3: Observability and Operations (Pre-Production)
@@ -243,15 +241,22 @@ For the stricter commercial-appliance target, a tiny upstream patch set is allow
    - Rate limiting at the Nginx level
    - Access logging with `X-Request-ID`
 
-4. Run the full sync pipeline:
+4. Bootstrap the production stack:
    ```bash
-   bash scripts/sync/generate-config.sh
-   bash scripts/sync/sync-newapi-channels.sh
+   starapihub bootstrap
+   ```
+   Or if admin is already seeded:
+   ```bash
+   starapihub sync
    ```
 
 5. Add ClewdR cookies for production instances.
 
-6. Run the full smoke test suite against the production URL.
+6. Verify and run smoke tests:
+   ```bash
+   starapihub health
+   starapihub diff
+   ```
 
 7. Onboard a small group of internal users first (canary):
    - Issue tokens for the pilot group

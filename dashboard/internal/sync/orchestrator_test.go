@@ -253,6 +253,71 @@ func TestOrchestrator_TargetFiltering(t *testing.T) {
 	}
 }
 
+func TestNormalizeTargets_PluralsNormalized(t *testing.T) {
+	targets, err := NormalizeTargets([]string{"channels", "providers"})
+	if err != nil {
+		t.Fatalf("NormalizeTargets error: %v", err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 targets, got %d: %v", len(targets), targets)
+	}
+	if targets[0] != "channel" {
+		t.Errorf("expected channel, got %s", targets[0])
+	}
+	if targets[1] != "provider" {
+		t.Errorf("expected provider, got %s", targets[1])
+	}
+}
+
+func TestNormalizeTargets_SingularsPassThrough(t *testing.T) {
+	targets, err := NormalizeTargets([]string{"channel", "config", "routing-rule"})
+	if err != nil {
+		t.Fatalf("NormalizeTargets error: %v", err)
+	}
+	if len(targets) != 3 {
+		t.Fatalf("expected 3 targets, got %d", len(targets))
+	}
+}
+
+func TestNormalizeTargets_UnknownTargetErrors(t *testing.T) {
+	_, err := NormalizeTargets([]string{"channel", "bogus", "fakething"})
+	if err == nil {
+		t.Fatal("expected error for unknown targets")
+	}
+	if !strings.Contains(err.Error(), "bogus") {
+		t.Errorf("error should mention 'bogus': %v", err)
+	}
+	if !strings.Contains(err.Error(), "fakething") {
+		t.Errorf("error should mention 'fakething': %v", err)
+	}
+	if !strings.Contains(err.Error(), "valid:") {
+		t.Errorf("error should list valid targets: %v", err)
+	}
+}
+
+func TestNormalizeTargets_EmptyReturnsNil(t *testing.T) {
+	targets, err := NormalizeTargets(nil)
+	if err != nil {
+		t.Fatalf("NormalizeTargets error: %v", err)
+	}
+	if targets != nil {
+		t.Errorf("expected nil, got %v", targets)
+	}
+}
+
+func TestNormalizeTargets_DeduplicatesPluralsAndSingulars(t *testing.T) {
+	targets, err := NormalizeTargets([]string{"channel", "channels"})
+	if err != nil {
+		t.Fatalf("NormalizeTargets error: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 target (deduped), got %d: %v", len(targets), targets)
+	}
+	if targets[0] != "channel" {
+		t.Errorf("expected channel, got %s", targets[0])
+	}
+}
+
 func TestOrchestrator_ReportCountsCorrect(t *testing.T) {
 	rec := &orchMockReconciler{
 		name: "provider",

@@ -3,6 +3,7 @@ package sync
 import (
 	"fmt"
 	"log"
+	"strings"
 )
 
 // SyncOptions configures orchestrator behavior.
@@ -13,6 +14,47 @@ type SyncOptions struct {
 	Verbose  bool
 	Targets  []string // empty = all, or subset of: "cookie", "provider", "config", "routing-rule", "channel", "pricing"
 	Output   string   // "text" or "json"
+}
+
+// ValidTargets is the set of recognized reconciler names.
+var ValidTargets = map[string]string{
+	"cookie":       "cookie",
+	"cookies":      "cookie",
+	"provider":     "provider",
+	"providers":    "provider",
+	"config":       "config",
+	"routing-rule": "routing-rule",
+	"routing-rules": "routing-rule",
+	"channel":      "channel",
+	"channels":     "channel",
+	"pricing":      "pricing",
+}
+
+// NormalizeTargets maps user-facing target names (including plurals) to canonical
+// reconciler names. Returns an error listing any unrecognized targets.
+func NormalizeTargets(targets []string) ([]string, error) {
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	var normalized []string
+	var unknown []string
+	seen := make(map[string]bool)
+	for _, t := range targets {
+		canonical, ok := ValidTargets[t]
+		if !ok {
+			unknown = append(unknown, t)
+			continue
+		}
+		if !seen[canonical] {
+			normalized = append(normalized, canonical)
+			seen[canonical] = true
+		}
+	}
+	if len(unknown) > 0 {
+		valid := []string{"cookie", "provider", "config", "routing-rule", "channel", "pricing"}
+		return nil, fmt.Errorf("unknown target(s): %s (valid: %s)", strings.Join(unknown, ", "), strings.Join(valid, ", "))
+	}
+	return normalized, nil
 }
 
 // SyncOrchestrator runs reconcilers in dependency order and produces a SyncReport.

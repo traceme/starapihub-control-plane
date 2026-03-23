@@ -1,8 +1,17 @@
 # Upstream Upgrade Strategy
 
+This document describes the **base** upgrade process for the control-plane stack.
+
+If you are operating in the stricter commercial-appliance mode, also read:
+
+- [upgrade-strategy-commercial-appliance.md](/Users/mac/projects/OpenRouterAround/starapihub/docs/upgrade-strategy-commercial-appliance.md)
+- [upstream-patches.md](/Users/mac/projects/OpenRouterAround/starapihub/docs/upstream-patches.md)
+- [version-matrix.md](/Users/mac/projects/OpenRouterAround/starapihub/control-plane/docs/version-matrix.md)
+- [patch-audit-workflow.md](/Users/mac/projects/OpenRouterAround/starapihub/control-plane/docs/patch-audit-workflow.md)
+
 ## Core Principle
 
-Because we never modify upstream source code, upgrades are straightforward:
+In the pure external-integration mode, upgrades are straightforward:
 
 1. Change the image tag
 2. Check for config schema changes
@@ -10,6 +19,8 @@ Because we never modify upstream source code, upgrades are straightforward:
 4. Verify
 
 No patch rebasing, no merge conflicts, no source diffing.
+
+In the commercial-appliance mode, this remains the default path. If a minimal upstream patch set exists, follow the additional patch-aware upgrade process in the root-level commercial appliance docs.
 
 ## Pre-Upgrade Checklist
 
@@ -136,3 +147,15 @@ When upgrading any component, check:
 | Default behavior change | Medium | Read release notes, adjust config if needed |
 | Port changes | High | Update compose, nginx config |
 | New required dependencies | Medium | Update compose (add services) |
+
+## Commercial Appliance Addendum
+
+If the appliance carries approved upstream patches:
+
+1. update the upstream version pin
+2. verify whether each patch is still needed
+3. reapply or remove only the documented minimal patch set
+4. run the fixed verification suite
+5. update the patch inventory and version matrix
+
+If an upgrade would require broad new divergence, reject or defer that upgrade.

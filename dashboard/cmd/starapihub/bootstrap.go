@@ -13,7 +13,6 @@ import (
 	"github.com/starapihub/dashboard/internal/audit"
 	"github.com/starapihub/dashboard/internal/bootstrap"
 	"github.com/starapihub/dashboard/internal/registry"
-	syncpkg "github.com/starapihub/dashboard/internal/sync"
 	"github.com/starapihub/dashboard/internal/upstream"
 )
 
@@ -119,11 +118,15 @@ func bootstrapCmd() *cobra.Command {
 			if !noAudit && !dryRun {
 				auditLogger := audit.NewLogger(auditLog)
 				bootDuration := time.Since(bootStartTime)
-				syncReport := report.SyncReport
-				if syncReport == nil {
-					syncReport = &syncpkg.SyncReport{}
+				var steps []audit.BootstrapStep
+				for _, s := range report.Steps {
+					steps = append(steps, audit.BootstrapStep{
+						Name:    s.Name,
+						Status:  s.Status,
+						Message: s.Message,
+					})
 				}
-				if auditErr := auditLogger.Write(syncReport, "bootstrap", nil, bootDuration); auditErr != nil {
+				if auditErr := auditLogger.WriteBootstrap(report.SyncReport, steps, report.Success, bootDuration); auditErr != nil {
 					if verbose {
 						fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: audit log write failed: %v\n", auditErr)
 					}

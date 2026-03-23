@@ -1,6 +1,11 @@
 # External Control Plane for New-API + Bifrost + ClewdR
 
-This project is an **external integration and control plane** that deploys, connects, and operates three upstream AI gateway systems without modifying their source code.
+This project is an **external integration and control plane** that deploys, connects, and operates three upstream AI gateway systems.
+
+Default mode is still **external integration first**. For the stricter commercial-appliance target, the preferred rule is:
+
+- use APIs, config, env, and orchestration first
+- allow only a **tiny, explicit, justified** upstream patch set when commercial requirements cannot be met externally
 
 ## Upstream Systems
 
@@ -12,10 +17,11 @@ This project is an **external integration and control plane** that deploys, conn
 
 ## Hard Rules
 
-1. **No source modifications** to New-API, Bifrost, or ClewdR — they are treated as vendor code.
+1. **No broad source divergence** in New-API, Bifrost, or ClewdR — they are treated as upstream vendor projects.
 2. **Hot path stays clean**: `Client -> New-API -> Bifrost -> ClewdR/Official Providers`. The control plane is never on the inference path.
 3. **ClewdR is isolated**: never silently mixed into premium traffic, only used in explicit risky/lab/fallback pools.
 4. **Billing truth lives in New-API**, routing truth lives in Bifrost, policy truth lives here.
+5. **If upstream patches exist, they must be minimal and documented** in the appliance patch inventory.
 
 ## Request Path vs Control Path
 
@@ -50,7 +56,9 @@ control-plane/
 │   ├── observability.md       # Request correlation and monitoring
 │   ├── runbook.md             # Startup, shutdown, rotation, incident response
 │   ├── failure-drills.md      # Component failure scenarios and expected behavior
-│   ├── upgrade-strategy.md    # Version pinning, upgrade workflow, rollback
+│   ├── upgrade-strategy.md    # Base upgrade workflow for upstream releases
+│   ├── version-matrix.md      # Appliance-to-upstream compatibility matrix
+│   ├── patch-audit-workflow.md # Required review flow before any upstream patch
 │   ├── rollout-plan.md        # Phased rollout from dev to production
 │   └── unofficial-provider-risk.md  # ClewdR risk assessment
 ├── deploy/                    # Deployment skeletons
@@ -83,6 +91,7 @@ control-plane/
 6. Follow `docs/config-sync.md` to push config into upstream systems.
 7. Run `scripts/smoke/run-all.sh` to verify (see `docs/verification.md` for test details).
 8. Read `docs/runbook.md` for day-to-day operations.
+9. For the commercial-appliance mode, also read `docs/version-matrix.md`, `docs/patch-audit-workflow.md`, and the root-level upgrade/patch docs.
 
 ## Integration Approach
 
@@ -96,4 +105,11 @@ This project integrates upstream systems exclusively through:
 - **Health checks** — HTTP probes on upstream health endpoints
 - **Observability** — log aggregation and request correlation headers
 
-Where an upstream system lacks a needed API or config surface, this project documents the limitation and provides the best external workaround (manual admin UI steps, file generation, etc.).
+Where an upstream system lacks a needed API or config surface, this project should first provide the best external workaround.
+
+For the commercial-appliance target only, if a requirement such as auditability or near-zero manual ops still cannot be reached, the project may introduce a **small upstream patch**. Any such patch must stay:
+
+- isolated
+- reviewable
+- plausibly upstreamable
+- explicitly tracked in the patch inventory

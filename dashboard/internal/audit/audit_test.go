@@ -248,6 +248,100 @@ func TestLoggerCreatesParentDirectories(t *testing.T) {
 	}
 }
 
+func TestWriteBootstrapRecordsStepsAndSyncReport(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+	logger := NewLogger(path)
+
+	syncReport := &sync.SyncReport{
+		TotalActions: 3,
+		Succeeded:    2,
+		Failed:       1,
+		Results: []sync.Result{
+			{
+				Action: sync.Action{Type: sync.ActionCreate, ResourceType: "channel", ResourceID: "ch1"},
+				Status: sync.StatusOK,
+			},
+			{
+				Action: sync.Action{Type: sync.ActionUpdate, ResourceType: "provider", ResourceID: "p1"},
+				Status: sync.StatusFailed,
+				Error:  errors.New("timeout"),
+			},
+		},
+	}
+	steps := []BootstrapStep{
+		{Name: "validate-prereqs", Status: "ok", Message: "all prereqs valid"},
+		{Name: "wait-services", Status: "ok", Message: "3 services healthy"},
+		{Name: "seed-admin", Status: "ok", Message: "admin seeded"},
+		{Name: "run-sync", Status: "ok", Message: "sync completed with 1 failure"},
+		{Name: "verify-health", Status: "ok", Message: "all healthy"},
+	}
+	err := logger.WriteBootstrap(syncReport, steps, true, 5*time.Second)
+	if err != nil {
+		t.Fatalf("WriteBootstrap failed: %v", err)
+	}
+
+	entries := readLines(t, path)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Operation != "bootstrap" {
+		t.Errorf("operation = %q, want bootstrap", e.Operation)
+	}
+	if e.TotalActions != 3 {
+		t.Errorf("total_actions = %d, want 3", e.TotalActions)
+	}
+	if e.Succeeded != 2 {
+		t.Errorf("succeeded = %d, want 2", e.Succeeded)
+	}
+	if e.Failed != 1 {
+		t.Errorf("failed = %d, want 1", e.Failed)
+	}
+	if len(e.BootstrapSteps) != 5 {
+		t.Fatalf("expected 5 bootstrap_steps, got %d", len(e.BootstrapSteps))
+	}
+	if e.BootstrapSteps[0].Name != "validate-prereqs" {
+		t.Errorf("step[0].name = %q, want validate-prereqs", e.BootstrapSteps[0].Name)
+	}
+	if e.BootstrapOK == nil || !*e.BootstrapOK {
+		t.Error("bootstrap_ok should be true")
+	}
+	if len(e.Changes) != 2 {
+		t.Errorf("expected 2 changes, got %d", len(e.Changes))
+	}
+	if e.DurationMs != 5000 {
+		t.Errorf("duration_ms = %d, want 5000", e.DurationMs)
+	}
+}
+
+func TestWriteBootstrapNilSyncReport(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+	logger := NewLogger(path)
+
+	steps := []BootstrapStep{
+		{Name: "validate-prereqs", Status: "ok"},
+		{Name: "run-sync", Status: "skipped", Message: "skipped by --skip-sync"},
+	}
+	err := logger.WriteBootstrap(nil, steps, true, 1*time.Second)
+	if err != nil {
+		t.Fatalf("WriteBootstrap failed: %v", err)
+	}
+
+	entries := readLines(t, path)
+	e := entries[0]
+	if e.TotalActions != 0 {
+		t.Errorf("total_actions = %d, want 0 for nil sync report", e.TotalActions)
+	}
+	if len(e.BootstrapSteps) != 2 {
+		t.Errorf("expected 2 bootstrap_steps, got %d", len(e.BootstrapSteps))
+	}
+	if e.BootstrapSteps[1].Status != "skipped" {
+		t.Errorf("step[1].status = %q, want skipped", e.BootstrapSteps[1].Status)
+	}
+}
+
 func TestNilSyncReportProducesZeroCounts(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.log")
