@@ -32,6 +32,7 @@ func buildRootCmd() *cobra.Command {
 	rootCmd.AddCommand(healthCmd())
 	rootCmd.AddCommand(traceCmd())
 	rootCmd.AddCommand(cookieStatusCmd())
+	rootCmd.AddCommand(upgradeCheckCmd())
 
 	return rootCmd
 }
