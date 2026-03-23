@@ -361,8 +361,11 @@ func buildDesiredState(reg *registry.Registry) map[string]any {
 	}
 
 	// Config: extract BifrostClientConfig from providers file (if global config section exists)
-	// This is typically provided as a separate section -- for now pass nil
-	ds["config"] = (*registry.BifrostClientConfig)(nil)
+	if reg.Providers != nil && reg.Providers.Config != nil {
+		ds["config"] = reg.Providers.Config
+	} else {
+		ds["config"] = (*registry.BifrostClientConfig)(nil)
+	}
 
 	if reg.RoutingRules != nil {
 		ds["routing-rule"] = reg.RoutingRules.Rules

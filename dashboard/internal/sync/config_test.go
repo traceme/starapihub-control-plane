@@ -250,6 +250,20 @@ func TestConfigName(t *testing.T) {
 	}
 }
 
+func TestConfigPlan_NilDesiredReturnsNilNil(t *testing.T) {
+	r := NewConfigReconciler(&mockBifrostConfigClient{})
+	live := &upstream.BifrostConfigResponse{MaxRetries: intPtr(3)}
+
+	// Typed nil -- this is what buildDesiredState passes when no config section exists
+	actions, err := r.Plan((*registry.BifrostClientConfig)(nil), live)
+	if err != nil {
+		t.Fatalf("Plan returned error: %v", err)
+	}
+	if actions != nil {
+		t.Errorf("expected nil actions for nil desired, got %v", actions)
+	}
+}
+
 func TestConfigApply_ClientError(t *testing.T) {
 	mock := &mockBifrostConfigClient{
 		updateErr: fmt.Errorf("connection refused"),

@@ -3,6 +3,7 @@ package registry
 // ProvidersFile is the top-level YAML wrapper for providers.yaml.
 type ProvidersFile struct {
 	Providers map[string]BifrostProviderDesired `yaml:"providers" json:"providers"`
+	Config    *BifrostClientConfig              `yaml:"config,omitempty" json:"config,omitempty"`
 }
 
 // BifrostProviderDesired is the desired state for a Bifrost provider.

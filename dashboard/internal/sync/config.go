@@ -40,6 +40,12 @@ func (r *ConfigReconciler) Plan(desired, live any) ([]Action, error) {
 	if !ok {
 		return nil, fmt.Errorf("ConfigReconciler.Plan: desired must be *registry.BifrostClientConfig, got %T", desired)
 	}
+	// Nil guard: when no config section exists in providers.yaml, buildDesiredState
+	// passes (*BifrostClientConfig)(nil). The type assertion succeeds (typed nil),
+	// but reflect.ValueOf would panic on Elem(). Return no-op.
+	if desiredCfg == nil {
+		return nil, nil
+	}
 	liveCfg, ok := live.(*upstream.BifrostConfigResponse)
 	if !ok {
 		return nil, fmt.Errorf("ConfigReconciler.Plan: live must be *upstream.BifrostConfigResponse, got %T", live)

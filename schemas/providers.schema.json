@@ -6,6 +6,21 @@
   "required": ["providers"],
   "additionalProperties": false,
   "properties": {
+    "config": {
+      "type": "object",
+      "description": "Optional Bifrost global config (PUT /api/config). Only non-null fields are synced.",
+      "additionalProperties": false,
+      "properties": {
+        "max_retries": { "type": "integer", "description": "Maximum retry attempts" },
+        "retry_backoff_initial_ms": { "type": "integer", "description": "Initial retry backoff delay in ms" },
+        "retry_backoff_max_ms": { "type": "integer", "description": "Maximum retry backoff delay in ms" },
+        "default_request_timeout_in_seconds": { "type": "integer", "description": "Per-request timeout in seconds" },
+        "stream_idle_timeout_in_seconds": { "type": "integer", "description": "Idle streaming timeout in seconds" },
+        "initial_pool_size": { "type": "integer", "description": "Initial connection pool size" },
+        "max_idle_conns_per_host": { "type": "integer", "description": "Max idle connections per host" },
+        "proxy_url": { "type": "string", "description": "HTTP proxy URL" }
+      }
+    },
     "providers": {
       "type": "object",
       "additionalProperties": {
