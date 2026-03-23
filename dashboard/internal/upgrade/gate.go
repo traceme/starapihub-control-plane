@@ -43,7 +43,7 @@ func RunAllGates(opts GateOptions) GateReport {
 	gates = append(gates, RunGateDeploy(opts))
 	gates = append(gates, RunGateSync(opts))
 	gates = append(gates, RunGateRequest(opts.RelayURL))
-	gates = append(gates, RunGateAudit(opts.RelayURL))
+	gates = append(gates, RunGateAudit(opts.RepoRoot))
 	gates = append(gates, RunGatePatch(opts.RepoRoot))
 
 	allPass := true

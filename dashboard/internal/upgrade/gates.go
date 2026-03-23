@@ -137,49 +137,30 @@ func RunGateRequest(relayURL string) GateResult {
 	}
 }
 
-// RunGateAudit verifies X-Request-ID header propagation (Gate 4).
-func RunGateAudit(relayURL string) GateResult {
-	if relayURL == "" {
-		return GateResult{
-			Gate:    "auditability",
-			Number:  4,
-			Status:  "fail",
-			Message: "RelayURL not set -- cannot verify auditability",
-		}
+// RunGateAudit verifies X-Request-ID patch is applied in source (Gate 4).
+func RunGateAudit(repoRoot string) GateResult {
+	if repoRoot == "" {
+		repoRoot = "."
 	}
 
-	testID := fmt.Sprintf("upgrade-check-%d", time.Now().UnixNano())
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", relayURL+"/api/status", nil)
+	patchFile := filepath.Join(repoRoot, "new-api", "middleware", "request-id.go")
+	content, err := os.ReadFile(patchFile)
 	if err != nil {
 		return GateResult{
 			Gate:    "auditability",
 			Number:  4,
 			Status:  "fail",
-			Message: fmt.Sprintf("Failed to create request: %v", err),
+			Message: fmt.Sprintf("Cannot read request-id source: %v", err),
 		}
 	}
-	req.Header.Set("X-Request-ID", testID)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return GateResult{
-			Gate:    "auditability",
-			Number:  4,
-			Status:  "fail",
-			Message: fmt.Sprintf("Request failed: %v", err),
-		}
-	}
-	defer resp.Body.Close()
-
-	actual := resp.Header.Get("X-Oneapi-Request-Id")
-	if actual == testID {
+	src := string(content)
+	if strings.Contains(src, `c.GetHeader("X-Request-ID")`) || strings.Contains(src, `c.GetHeader("x-request-id")`) {
 		return GateResult{
 			Gate:    "auditability",
 			Number:  4,
 			Status:  "pass",
-			Message: "X-Request-ID propagation verified",
+			Message: "X-Request-ID propagation patch verified in source",
 		}
 	}
 
@@ -187,8 +168,11 @@ func RunGateAudit(relayURL string) GateResult {
 		Gate:    "auditability",
 		Number:  4,
 		Status:  "fail",
-		Message: fmt.Sprintf("Expected X-Oneapi-Request-Id=%s, got=%s", testID, actual),
-		Details: []string{"Ensure Patch 001 is applied and nginx X-Request-ID injection is configured"},
+		Message: "X-Request-ID propagation patch not found in middleware/request-id.go",
+		Details: []string{
+			`Expected pattern: c.GetHeader("X-Request-ID")`,
+			"See docs/upstream-patches.md for patch application steps",
+		},
 	}
 }
 

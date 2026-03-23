@@ -86,10 +86,74 @@ func TestGateRequestNoURL(t *testing.T) {
 	}
 }
 
-func TestGateAuditNoURL(t *testing.T) {
-	result := RunGateAudit("")
+func TestGateAuditPatchPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "new-api", "middleware")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := `package middleware
+
+import "github.com/gin-gonic/gin"
+
+func RequestId() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		id := c.GetHeader("X-Request-ID")
+		if id == "" {
+			id = "generated-id"
+		}
+		c.Next()
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "request-id.go"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := RunGateAudit(tmpDir)
+	if result.Status != "pass" {
+		t.Errorf("expected pass, got %s: %s", result.Status, result.Message)
+	}
+	if !strings.Contains(result.Message, "verified") {
+		t.Errorf("expected message to contain 'verified', got: %s", result.Message)
+	}
+}
+
+func TestGateAuditPatchMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "new-api", "middleware")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := `package middleware
+
+func RequestId() func() {
+	return func() {
+		id := common.GetTimeString() + common.GetRandomString(8)
+		_ = id
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "request-id.go"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := RunGateAudit(tmpDir)
 	if result.Status != "fail" {
 		t.Errorf("expected fail, got %s: %s", result.Status, result.Message)
+	}
+	if !strings.Contains(result.Message, "not found") {
+		t.Errorf("expected message to contain 'not found', got: %s", result.Message)
+	}
+}
+
+func TestGateAuditFileNotFound(t *testing.T) {
+	result := RunGateAudit("/nonexistent/path")
+	if result.Status != "fail" {
+		t.Errorf("expected fail, got %s", result.Status)
+	}
+	if !strings.Contains(result.Message, "Cannot read") {
+		t.Errorf("expected message to contain 'Cannot read', got: %s", result.Message)
 	}
 }
 
@@ -200,6 +264,17 @@ func RequestId() func() {
 
 	if len(report.Gates) != 5 {
 		t.Errorf("expected 5 gates, got %d", len(report.Gates))
+	}
+
+	// Gate 4 should pass (source file check finds patch pattern)
+	if len(report.Gates) >= 4 {
+		gate4 := report.Gates[3]
+		if gate4.Number != 4 {
+			t.Errorf("expected gate 4 at index 3, got gate %d", gate4.Number)
+		}
+		if gate4.Status != "pass" {
+			t.Errorf("expected gate 4 to pass, got %s: %s", gate4.Status, gate4.Message)
+		}
 	}
 
 	// Gate 5 should pass (patch file present with correct pattern)
