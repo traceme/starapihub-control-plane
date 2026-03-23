@@ -56,7 +56,11 @@ services:
   # ============================================================
 
   new-api:
-    image: calciumion/new-api:${NEWAPI_VERSION:-latest}
+    # Two modes:
+    #   Upstream (default):  NEWAPI_IMAGE=calciumion/new-api  NEWAPI_VERSION=latest
+    #   Appliance (patched): NEWAPI_IMAGE=starapihub/new-api  NEWAPI_VERSION=patched
+    # Build patched image: cd control-plane && make build-patched-newapi
+    image: ${NEWAPI_IMAGE:-calciumion/new-api}:${NEWAPI_VERSION:-latest}
     container_name: cp-new-api
     restart: unless-stopped
     command: --log-dir /app/logs

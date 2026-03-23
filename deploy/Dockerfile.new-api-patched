@@ -1,0 +1,41 @@
+# Build New-API with appliance patches applied.
+#
+# Usage:
+#   docker build -t starapihub/new-api:patched \
+#     -f control-plane/deploy/Dockerfile.new-api-patched \
+#     new-api/
+#
+# Or via Makefile:
+#   cd control-plane && make build-patched-newapi
+#
+# Context: the new-api/ directory (with Patch 001 already applied).
+# This Dockerfile is identical to upstream except the build context
+# includes our patched middleware/request-id.go.
+#
+# Patches applied:
+#   001: X-Request-ID propagation (middleware/request-id.go)
+#   See docs/upstream-patches.md for full audit.
+
+FROM oven/bun:latest AS frontend
+WORKDIR /build
+COPY web/package.json web/bun.lock ./
+RUN bun install
+COPY ./web .
+COPY ./VERSION .
+RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
+
+FROM golang:alpine AS backend
+ENV GO111MODULE=on CGO_ENABLED=0
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+COPY --from=frontend /build/dist ./web/dist
+RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)-patched'" -o new-api
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/*
+COPY --from=backend /build/new-api /usr/local/bin/new-api
+EXPOSE 3000
+WORKDIR /app
+ENTRYPOINT ["new-api"]

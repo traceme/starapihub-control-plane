@@ -92,6 +92,51 @@ export async function wizardTest(): Promise<{ success: boolean; response: string
   return request('/api/wizard/test', { method: 'POST' });
 }
 
+// Ops: sync/diff/audit/bootstrap status
+export interface AuditEntry {
+  timestamp: string;
+  operation: string;
+  targets: string[] | null;
+  total_actions: number;
+  succeeded: number;
+  failed: number;
+  drift_warnings: number;
+  skipped: number;
+  duration_ms: number;
+  changes?: Array<{
+    resource_type: string;
+    resource_id: string;
+    action: string;
+    status: string;
+    error?: string;
+  }>;
+  bootstrap_steps?: Array<{
+    name: string;
+    status: string;
+    message?: string;
+  }>;
+  bootstrap_ok?: boolean;
+}
+
+export async function fetchSyncStatus(): Promise<AuditEntry | { status: string; message: string }> {
+  return request('/api/ops/sync');
+}
+
+export async function fetchDiffStatus(): Promise<AuditEntry | { status: string; message: string }> {
+  return request('/api/ops/diff');
+}
+
+export async function fetchAuditLog(limit = 20, operation?: string): Promise<{ entries: AuditEntry[]; total: number }> {
+  const q = new URLSearchParams();
+  q.set('limit', String(limit));
+  if (operation) q.set('operation', operation);
+  return request(`/api/ops/audit?${q.toString()}`);
+}
+
+export async function fetchBootstrapStatus(): Promise<AuditEntry | { status: string; message: string }> {
+  return request('/api/ops/bootstrap');
+}
+
 // SSE connection via fetch streaming (EventSource doesn't support auth headers)
 export function connectSSE(
   token: string,

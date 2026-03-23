@@ -8,6 +8,7 @@ import CookiePanel from './components/CookiePanel';
 import ModelEditor from './components/ModelEditor';
 import LogViewer from './components/LogViewer';
 import SetupWizard from './components/SetupWizard';
+import OpsPanel from './components/OpsPanel';
 import AlertBanner from './components/AlertBanner';
 import styles from './App.module.css';
 
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/models', label: 'Models', icon: '\u25C6' },
   { to: '/cookies', label: 'Cookies', icon: '\u25CF' },
   { to: '/logs', label: 'Logs', icon: '\u25B6' },
+  { to: '/ops', label: 'Ops', icon: '\u2692' },
   { to: '/setup', label: 'Setup', icon: '\u2699' },
 ];
 
@@ -155,6 +157,7 @@ export default function App() {
             <Route path="/cookies" element={<CookiePanel cookies={state.cookies} />} />
             <Route path="/models" element={<ModelEditor />} />
             <Route path="/logs" element={<LogViewer />} />
+            <Route path="/ops" element={<OpsPanel />} />
             <Route path="/setup" element={<SetupWizard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
