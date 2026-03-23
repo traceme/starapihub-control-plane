@@ -352,8 +352,10 @@ func buildReconcilers(
 func buildDesiredState(reg *registry.Registry) map[string]any {
 	ds := make(map[string]any)
 
-	// Cookies: desired state would be resolved at CLI level from registry
-	// For now, pass nil (cookie reconciler needs []string)
+	// Cookies: managed via ClewdR admin UI, not stored in YAML registry.
+	// Session tokens are authentication secrets that should not live alongside
+	// infrastructure config. The CookieReconciler is push-only by design
+	// (Phase 3 decision) and is a no-op with empty desired state.
 	ds["cookie"] = []string{}
 
 	if reg.Providers != nil {
