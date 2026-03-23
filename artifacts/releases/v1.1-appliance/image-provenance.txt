@@ -1,0 +1,21 @@
+# Image provenance -- v1.1 patched image build
+# Mode: appliance
+# Generated: 2026-03-23T13:33:36Z
+
+## Patched image (from docker image inspect)
+
+- starapihub/new-api:patched: sha256:75468e16023cb8778673ab5be3a12436e524a50b849667a2a76d273117b51956
+
+## Upstream image digests (from docker image inspect)
+
+- calciumion/new-api:latest: sha256:648622b40a8275ed45eb988b0df3f0a548241b4eea5e2367ad377cd892d31b4a
+- maximhq/bifrost:latest: sha256:0b67d35ef9c71d09c3ccc3eeb844f91e98b1cacd38b004e00c32921e26ad7350
+- clewdr:local: sha256:12d48e7e17877d0be8b8c6eedcd6bf90f335141921c4f5893848db6ab8f18ea5
+- starapihub/dashboard:local: sha256:cf142e8c8cef42888011f902f9b33e393a9386a32c2b48e32522bd2dfde28d33
+
+## Build details
+
+- Dockerfile: control-plane/deploy/Dockerfile.new-api-patched
+- Build command: make build-patched-newapi
+- Patch applied: 001 (X-Request-ID propagation via middleware/request-id.go)
+- Version string: -patched

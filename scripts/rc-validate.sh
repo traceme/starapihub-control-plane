@@ -456,7 +456,7 @@ log "── Image provenance ──"
   echo ""
   echo "## Local image digests (from docker image inspect)"
   echo ""
-  for img in "calciumion/new-api:latest" "maximhq/bifrost:latest" "clewdr:local" "starapihub/dashboard:local"; do
+  for img in "calciumion/new-api:latest" "starapihub/new-api:patched" "maximhq/bifrost:latest" "clewdr:local" "starapihub/dashboard:local"; do
     if docker image inspect "$img" > /dev/null 2>&1; then
       repo_digest=$(docker image inspect "$img" --format '{{range .RepoDigests}}{{.}}{{end}}' 2>/dev/null)
       local_id=$(docker image inspect "$img" --format '{{.Id}}' 2>/dev/null)
