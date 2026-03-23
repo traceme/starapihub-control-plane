@@ -1,0 +1,43 @@
+# Release-validation overrides.
+#
+# Use instead of docker-compose.override.yml for RC validation.
+# Exposes New-API, Bifrost, and Dashboard ports for host-side CLI validation.
+# ClewdR ports are NOT exposed — the isolation smoke test validates they
+# are unreachable from the host. ClewdR health is validated through the
+# dashboard's /api/health endpoint (dashboard reaches ClewdR via provider-net).
+# Nginx is moved to a profile since TLS termination is not needed for validation.
+#
+# Usage:
+#   cd deploy
+#   docker compose -f docker-compose.yml -f docker-compose.rc-validate.yml \
+#     --env-file env/common.env --profile clewdr up -d --build
+#
+# Then run: cd .. && make rc-validate
+
+services:
+  # Expose New-API for CLI health/sync/diff/bootstrap
+  new-api:
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # Expose Bifrost for CLI health check
+  bifrost:
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  # Expose dashboard for /api/version and /api/health validation
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    image: starapihub/dashboard:local
+    ports:
+      - "127.0.0.1:8090:8090"
+
+  # Nginx: not needed for validation (services hit directly on exposed ports).
+  # Moves nginx to a profile so it does not start unless explicitly requested.
+  nginx:
+    profiles:
+      - tls
+
+  # ClewdR: NO host ports. Smoke isolation test validates they are unreachable.

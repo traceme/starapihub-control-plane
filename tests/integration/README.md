@@ -1,132 +1,86 @@
 # Integration Tests
 
-## Overview
+End-to-end tests that build the `starapihub` CLI binary and run it against a live Docker Compose stack (New-API + Bifrost + Postgres + Redis).
 
-Integration tests verify end-to-end behavior across the full stack: Client -> New-API -> Bifrost -> Provider/ClewdR. Unlike smoke tests (which check individual service health), integration tests validate that the entire request path works correctly for real-world scenarios.
+## Prerequisites
 
-## Test Strategy
+- Docker and Docker Compose
+- Go 1.22+
+- The test compose stack running (see below)
 
-### What Integration Tests Cover
+## Running
 
-| Category | Test Scenario | Priority |
-|----------|--------------|----------|
-| **Request path** | Full chat completion through all three layers | P0 |
-| **Model routing** | Each logical model reaches the correct provider pool | P0 |
-| **Billing accuracy** | New-API deducts correct token balance for each model | P1 |
-| **Fallback chain** | When primary provider fails, traffic shifts to fallback | P1 |
-| **ClewdR isolation** | ClewdR-backed models never appear in premium channel | P0 |
-| **User groups** | Group-restricted models reject unauthorized users | P1 |
-| **Rate limiting** | New-API enforces per-user rate limits correctly | P2 |
-| **Correlation** | X-Request-ID appears in New-API logs, Bifrost logs, and provider logs | P1 |
-| **Streaming** | SSE streaming works end-to-end for chat completions | P1 |
-| **Error propagation** | Provider errors surface correctly to the client | P2 |
-
-### What Integration Tests Do NOT Cover
-
-- Upstream system internals (covered by their own test suites)
-- Load/performance testing (separate concern)
-- UI testing for admin panels
-- Secret rotation (operational procedure, not automated test)
-
-## Current Status
-
-Integration tests are currently **manual procedures** documented below. Automation is planned for a future phase.
-
-### Why Manual First
-
-1. The upstream systems lack test-mode APIs that would let us safely run automated tests without real credentials.
-2. Full integration tests require real provider API keys (or mock providers), which adds infrastructure complexity.
-3. Manual tests provide the same coverage and are sufficient for the initial deployment phase.
-
-## Manual Test Procedures
-
-### Test 1: Full Request Path (P0)
-
-**Goal:** Verify a chat completion request flows from client through New-API, Bifrost, to the provider and back.
+### Start the test stack
 
 ```bash
-# Send a request to a premium model
-curl -X POST https://api.example.com/v1/chat/completions \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -H "X-Request-ID: integration-test-001" \
-  -d '{
-    "model": "claude-sonnet",
-    "messages": [{"role": "user", "content": "Say hello in one word."}],
-    "max_tokens": 5
-  }'
+cd tests/integration/compose
+docker compose -f docker-compose.test.yml up -d
 ```
 
-**Expected:** HTTP 200 with a valid chat completion response.
+Wait for services to become healthy:
 
-**Verify:**
-- Response contains `choices[0].message.content`
-- Check New-API logs: `docker logs <newapi> | grep integration-test-001`
-- Check Bifrost logs: `docker logs <bifrost> | grep integration-test-001`
+```bash
+docker compose -f docker-compose.test.yml ps
+```
 
-### Test 2: Model Routing Correctness (P0)
+### Run tests
 
-**Goal:** Verify each logical model is routed to the expected provider.
+From the `control-plane/` directory:
 
-For each model in `policies/logical-models.example.yaml`:
-1. Send a request with that model name
-2. Check Bifrost logs to confirm which provider received the request
-3. Verify the provider matches the expected pool from the route policy
+```bash
+make test-integration
+```
 
-### Test 3: Fallback Chain (P1)
+Or directly:
 
-**Goal:** Verify traffic shifts to fallback when primary is unavailable.
+```bash
+cd tests/integration
+INTEGRATION=1 go test -v -timeout 300s ./...
+```
 
-1. Send a request to `cheap-chat` (standard tier) -- should succeed via primary
-2. Disable the primary Anthropic provider in Bifrost config
-3. Restart Bifrost: `docker-compose restart bifrost`
-4. Send another request to `cheap-chat` -- should succeed via ClewdR fallback
-5. Check Bifrost logs to confirm ClewdR was used
-6. Re-enable the primary provider and restart Bifrost
+The `INTEGRATION=1` environment variable gates the tests. Without it, `go test` skips all integration tests so that `make test-unit` remains fast and dependency-free.
 
-### Test 4: Premium Isolation (P0)
+### Tear down
 
-**Goal:** Verify premium models never fall back to ClewdR.
+```bash
+make clean
+```
 
-1. Disable all official providers in Bifrost
-2. Send a request to `claude-sonnet` (premium tier)
-3. **Expected:** HTTP 502/503 (no providers available), NOT a ClewdR response
-4. Re-enable official providers
+Or:
 
-### Test 5: Billing Accuracy (P1)
+```bash
+cd tests/integration/compose
+docker compose -f docker-compose.test.yml down -v --remove-orphans
+```
 
-**Goal:** Verify New-API deducts the correct token balance.
+## What the tests cover
 
-1. Note the user's current balance in New-API admin UI
-2. Send a request with known token count
-3. Check the user's balance after the request
-4. Verify the deduction matches the model's configured pricing
+| Test | What it verifies |
+|------|-----------------|
+| `TestHealth_ReportsServiceStatus` | `starapihub health` reaches live services |
+| `TestHealth_JSONOutput` | `--output json` produces parseable JSON |
+| `TestBootstrap_SeedsAdminAndSyncs` | `starapihub bootstrap` runs, audit log records `bootstrap_steps` |
+| `TestSync_DryRunShowsActions` | `starapihub sync --dry-run` reports planned actions |
+| `TestSync_DryRunJSON` | `--dry-run --output json` produces structured output |
+| `TestSync_TargetNormalization` | Plural targets (`channels`) normalize to canonical names |
+| `TestSync_UnknownTargetErrors` | Unknown targets produce a clear error |
+| `TestSync_ApplyWithAuditLog` | `starapihub sync` writes to the JSONL audit log |
+| `TestDiff_ProducesDriftReport` | `starapihub diff` reports drift |
+| `TestDiff_JSONOutput` | `--output json` drift report is parseable |
+| `TestDiff_TargetFilterWorks` | `--target channel` filters to one reconciler |
+| `TestValidate_ValidFixtures` | `starapihub validate` accepts valid YAML registries |
+| `TestPatch001_XRequestIDPropagation` | Incoming `X-Request-ID` is preserved by New-API (Patch 001) |
 
-## Future Automation Plan
+## Test fixtures
 
-### Phase 1: Script-Based Automation
+`fixtures/` contains minimal YAML registries (channels, providers, pricing) used by sync/diff tests. These are not production configs — they exist only to exercise the reconcilers against live services.
 
-Convert manual procedures above into bash scripts with assertions. Store in `tests/integration/scripts/`.
+## Test architecture
 
-### Phase 2: Mock Provider
+Tests are in a separate Go module (`tests/integration/go.mod`) because they live outside the `dashboard/` module. Each test:
 
-Build a lightweight HTTP server that mimics provider responses. This eliminates the need for real API keys during testing.
+1. Builds the CLI binary from `../../dashboard/cmd/starapihub/`
+2. Runs it as a subprocess against the live Docker Compose services
+3. Asserts on exit code, stdout, and (for audit tests) written JSONL entries
 
-Candidate approaches:
-- Simple Go HTTP server returning canned responses
-- Use Bifrost's test utilities if available
-- Use a tool like `mockserver` or `wiremock`
-
-### Phase 3: CI Integration
-
-- Run smoke tests on every deployment
-- Run integration tests nightly or on-demand
-- Alert on failures via webhook/email
-
-## Prerequisites for Running Integration Tests
-
-- Full stack running (docker-compose up)
-- Valid API keys configured in Bifrost
-- A test user account in New-API with sufficient balance
-- Access to container logs (`docker logs`)
-- At least one working ClewdR instance (for fallback tests)
+This means the tests exercise the real CLI binary, not test doubles.

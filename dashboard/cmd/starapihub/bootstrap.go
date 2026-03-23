@@ -50,6 +50,10 @@ func bootstrapCmd() *cobra.Command {
 				adminUsername = "root"
 			}
 			adminPassword := os.Getenv("NEWAPI_ADMIN_PASSWORD")
+			adminUserID := os.Getenv("NEWAPI_ADMIN_USER_ID")
+			if adminUserID == "" {
+				adminUserID = "1"
+			}
 
 			var clewdrURLs []string
 			if clewdrURLsStr != "" {
@@ -75,6 +79,7 @@ func bootstrapCmd() *cobra.Command {
 				ClewdRAdminToken: clewdrToken,
 				AdminUsername:    adminUsername,
 				AdminPassword:    adminPassword,
+				AdminUserID:      adminUserID,
 			}
 
 			b := bootstrap.New(opts)
@@ -88,6 +93,12 @@ func bootstrapCmd() *cobra.Command {
 				} else {
 					httpClient := &http.Client{Timeout: 30 * time.Second}
 					newAPIClient := upstream.NewNewAPIClient(httpClient, newAPIURL)
+					// New-API admin endpoints require New-Api-User header
+					adminUserID := os.Getenv("NEWAPI_ADMIN_USER_ID")
+					if adminUserID == "" {
+						adminUserID = "1" // default: first admin user
+					}
+					newAPIClient.SetAdminUserID(adminUserID)
 					bifrostClient := upstream.NewBifrostClient(httpClient, bifrostURL)
 					clewdrClient := upstream.NewClewdRClient(httpClient)
 

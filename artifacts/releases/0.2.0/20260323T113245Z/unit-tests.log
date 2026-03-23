@@ -1,0 +1,15 @@
+cd dashboard && go test -count=1 -timeout 120s ./...
+?   	github.com/starapihub/dashboard	[no test files]
+ok  	github.com/starapihub/dashboard/cmd/starapihub	0.794s
+ok  	github.com/starapihub/dashboard/internal/api	1.156s
+ok  	github.com/starapihub/dashboard/internal/audit	3.773s
+ok  	github.com/starapihub/dashboard/internal/bootstrap	7.391s
+ok  	github.com/starapihub/dashboard/internal/buildinfo	3.130s
+ok  	github.com/starapihub/dashboard/internal/drift	2.495s
+ok  	github.com/starapihub/dashboard/internal/poller	1.964s
+ok  	github.com/starapihub/dashboard/internal/registry	4.983s
+ok  	github.com/starapihub/dashboard/internal/store	5.601s
+ok  	github.com/starapihub/dashboard/internal/sync	6.145s
+ok  	github.com/starapihub/dashboard/internal/trace	5.993s
+ok  	github.com/starapihub/dashboard/internal/upgrade	6.283s
+ok  	github.com/starapihub/dashboard/internal/upstream	6.047s

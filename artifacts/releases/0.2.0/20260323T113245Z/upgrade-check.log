@@ -1,0 +1,13 @@
+Upgrade Verification Report
+===========================
+
+  Gate 1 (Deployment):         PASS  All services healthy
+  Gate 2 (Sync):               PASS  Dry-run sync clean
+  Gate 3 (Request Path):       PASS  Relay endpoint reachable (status 200)
+  Gate 4 (Auditability):       PASS  X-Request-ID propagation patch verified in source
+  Gate 5 (Patch Intent):       PASS  All active patches verified (1/1)
+
+Result: PASS (5/5 gates passed)
+
+Version Matrix Row:
+| `current` | current | `v0.11.7-4-gd7c5e84f` | `helm-chart-v2.0.14` | `v0.12.23` | 1 | upgrade-check passed | 2026-03-23 |

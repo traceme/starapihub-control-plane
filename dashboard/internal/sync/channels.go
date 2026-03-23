@@ -69,7 +69,8 @@ func (r *ChannelReconciler) Plan(desired, live any) ([]Action, error) {
 
 	// Check each desired channel
 	for name, desired := range desiredMap {
-		liveCh, exists := liveByName[name]
+		// Match by desired.Name (display name), not the registry key
+		liveCh, exists := liveByName[desired.Name]
 		if !exists {
 			actions = append(actions, Action{
 				Type:         ActionCreate,
@@ -95,9 +96,14 @@ func (r *ChannelReconciler) Plan(desired, live any) ([]Action, error) {
 	}
 
 	// Prune: live channels not in desired
+	// Build set of desired display names for reverse lookup
+	desiredNames := make(map[string]bool, len(desiredMap))
+	for _, d := range desiredMap {
+		desiredNames[d.Name] = true
+	}
 	if r.prune {
 		for name, liveCh := range liveByName {
-			if _, inDesired := desiredMap[name]; !inDesired {
+			if !desiredNames[name] {
 				if liveCh.UsedQuota > 0 {
 					log.Printf("WARNING: skipping delete of channel %s (has billing history: used_quota=%d)", name, liveCh.UsedQuota)
 					continue

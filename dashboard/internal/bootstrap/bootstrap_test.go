@@ -52,8 +52,8 @@ func TestValidatePrereqs_MissingEnvVars(t *testing.T) {
 		t.Fatalf("expected failed, got %s", result.Status)
 	}
 
-	// Check that each missing env var is listed by name
-	for _, envName := range []string{"NEWAPI_URL", "NEWAPI_ADMIN_TOKEN", "BIFROST_URL", "CLEWDR_URLS", "CLEWDR_ADMIN_TOKEN"} {
+	// Check that each required env var is listed by name (ClewdR is optional)
+	for _, envName := range []string{"NEWAPI_URL", "NEWAPI_ADMIN_TOKEN", "BIFROST_URL"} {
 		if !strings.Contains(result.Message, envName) {
 			t.Errorf("expected message to mention %s, got: %s", envName, result.Message)
 		}

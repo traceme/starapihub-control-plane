@@ -70,6 +70,7 @@ type BootstrapOptions struct {
 	ClewdRAdminToken string
 	AdminUsername    string // default "root"
 	AdminPassword    string // default "" (generated if empty)
+	AdminUserID      string // New-Api-User header value (default "1")
 }
 
 // SyncDeps holds the sync engine dependencies injected by the CLI command.
@@ -119,6 +120,11 @@ func New(opts BootstrapOptions) *Bootstrapper {
 	var newAPIClient *upstream.NewAPIClient
 	if opts.NewAPIURL != "" {
 		newAPIClient = upstream.NewNewAPIClient(httpClient, opts.NewAPIURL)
+		userID := opts.AdminUserID
+		if userID == "" {
+			userID = "1"
+		}
+		newAPIClient.SetAdminUserID(userID)
 	}
 
 	var bifrostClient *upstream.BifrostClient
@@ -151,7 +157,9 @@ func (b *Bootstrapper) ValidatePrereqs() *StepResult {
 
 	var missing []PrereqItem
 
-	// Check env vars (by checking opts fields, which are populated from env vars)
+	// Check env vars (by checking opts fields, which are populated from env vars).
+	// ClewdR is optional — the control plane may not have direct access to ClewdR
+	// instances (e.g. when ClewdR is on an internal Docker network).
 	checks := []struct {
 		value string
 		name  string
@@ -159,8 +167,6 @@ func (b *Bootstrapper) ValidatePrereqs() *StepResult {
 		{b.opts.NewAPIURL, "NEWAPI_URL"},
 		{b.opts.NewAPIAdminToken, "NEWAPI_ADMIN_TOKEN"},
 		{b.opts.BifrostURL, "BIFROST_URL"},
-		{strings.Join(b.opts.ClewdRURLs, ","), "CLEWDR_URLS"},
-		{b.opts.ClewdRAdminToken, "CLEWDR_ADMIN_TOKEN"},
 	}
 	for _, c := range checks {
 		if c.value == "" {

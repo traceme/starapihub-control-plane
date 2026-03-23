@@ -25,7 +25,9 @@ dashboard/frontend/dist/
 
 # Go build artifacts
 dashboard/dashboard
+dashboard/starapihub
 
-# Logs
+# Logs (except release evidence)
 *.log
+!artifacts/releases/**/*.log
 .gstack/

@@ -1,0 +1,104 @@
+cd dashboard && docker build \
+		--build-arg VERSION=0.2.0 \
+		--build-arg BUILD_DATE=2026-03-23T11:33:09Z \
+		-t starapihub/dashboard:local .
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 749B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/golang:1.24-alpine
+#2 ...
+
+#3 [auth] library/golang:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 [auth] library/node:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [auth] library/alpine:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/library/node:20-alpine
+#6 ...
+
+#7 [internal] load metadata for docker.io/library/alpine:3.19
+#7 DONE 3.2s
+
+#2 [internal] load metadata for docker.io/library/golang:1.24-alpine
+#2 DONE 3.2s
+
+#6 [internal] load metadata for docker.io/library/node:20-alpine
+#6 DONE 3.2s
+
+#8 [internal] load .dockerignore
+#8 transferring context: 2B done
+#8 DONE 0.0s
+
+#9 [stage-2 1/3] FROM docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
+#9 resolve docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1 done
+#9 DONE 0.0s
+
+#10 [frontend 1/6] FROM docker.io/library/node:20-alpine@sha256:b88333c42c23fbd91596ebd7fd10de239cedab9617de04142dde7315e3bc0afa
+#10 resolve docker.io/library/node:20-alpine@sha256:b88333c42c23fbd91596ebd7fd10de239cedab9617de04142dde7315e3bc0afa done
+#10 DONE 0.0s
+
+#11 [backend 1/7] FROM docker.io/library/golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191
+#11 resolve docker.io/library/golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 0.0s done
+#11 DONE 0.0s
+
+#12 [internal] load build context
+#12 transferring context: 11.88MB 0.1s done
+#12 DONE 0.1s
+
+#13 [backend 3/7] COPY go.mod go.sum ./
+#13 CACHED
+
+#14 [backend 2/7] WORKDIR /build
+#14 CACHED
+
+#15 [frontend 5/6] COPY frontend/ ./
+#15 CACHED
+
+#16 [frontend 4/6] RUN npm ci
+#16 CACHED
+
+#17 [frontend 2/6] WORKDIR /build
+#17 CACHED
+
+#18 [frontend 3/6] COPY frontend/package.json frontend/package-lock.json ./
+#18 CACHED
+
+#19 [backend 4/7] RUN go mod download
+#19 CACHED
+
+#20 [frontend 6/6] RUN npm run build
+#20 CACHED
+
+#21 [backend 5/7] COPY . .
+#21 DONE 0.2s
+
+#22 [backend 6/7] COPY --from=frontend /build/dist ./frontend/dist
+#22 DONE 0.0s
+
+#23 [backend 7/7] RUN CGO_ENABLED=0 go build     -ldflags "-X 'github.com/starapihub/dashboard/internal/buildinfo.Version=0.2.0' -X 'github.com/starapihub/dashboard/internal/buildinfo.BuildDate=2026-03-23T11:33:09Z'"     -o dashboard .
+#23 DONE 5.2s
+
+#24 [stage-2 2/3] RUN apk add --no-cache ca-certificates
+#24 CACHED
+
+#25 [stage-2 3/3] COPY --from=backend /build/dashboard /usr/local/bin/dashboard
+#25 DONE 0.0s
+
+#26 exporting to image
+#26 exporting layers
+#26 exporting layers 0.3s done
+#26 exporting manifest sha256:46b5aca7e81f2aacdc2878ae389df9bcc8d7b5976fff3d258c4bc0642c08fcb6
+#26 exporting manifest sha256:46b5aca7e81f2aacdc2878ae389df9bcc8d7b5976fff3d258c4bc0642c08fcb6 done
+#26 exporting config sha256:22655341c9f9a2575e86f6a1d2e6dfcc220367e96a8fe4ec06c3edb023f8fd5a done
+#26 exporting attestation manifest sha256:9388587b817acc72aac303a3ff1670981a9339e5ff9bffc6742fb82c68b15bda done
+#26 exporting manifest list sha256:cf142e8c8cef42888011f902f9b33e393a9386a32c2b48e32522bd2dfde28d33 done
+#26 naming to docker.io/starapihub/dashboard:local done
+#26 unpacking to docker.io/starapihub/dashboard:local 0.0s done
+#26 DONE 0.3s

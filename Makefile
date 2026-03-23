@@ -3,6 +3,10 @@
 DASHBOARD_DIR := dashboard
 INTEGRATION_DIR := tests/integration
 BINARY := $(DASHBOARD_DIR)/starapihub
+VERSION := $(shell cat VERSION 2>/dev/null || echo dev)
+BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+BUILDINFO_PKG := github.com/starapihub/dashboard/internal/buildinfo
+LDFLAGS := -X '$(BUILDINFO_PKG).Version=$(VERSION)' -X '$(BUILDINFO_PKG).BuildDate=$(BUILD_DATE)'
 
 .PHONY: all build test test-unit test-integration lint clean help
 
@@ -15,10 +19,13 @@ help: ## Show this help
 # --- Build ---
 
 build: ## Build the starapihub CLI binary
-	cd $(DASHBOARD_DIR) && go build -o starapihub ./cmd/starapihub/
+	cd $(DASHBOARD_DIR) && go build -ldflags "$(LDFLAGS)" -o starapihub ./cmd/starapihub/
 
 build-dashboard: ## Build the full dashboard Docker image
-	cd $(DASHBOARD_DIR) && docker build -t starapihub/dashboard:local .
+	cd $(DASHBOARD_DIR) && docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t starapihub/dashboard:local .
 
 # --- Test ---
 
@@ -28,7 +35,7 @@ test-unit: ## Run Go unit tests
 	cd $(DASHBOARD_DIR) && go test -count=1 -timeout 120s ./...
 
 test-integration: build ## Run integration tests against live Docker Compose stack
-	cd $(INTEGRATION_DIR) && INTEGRATION=1 go test -v -timeout 300s ./...
+	cd $(INTEGRATION_DIR) && INTEGRATION=1 go test -count=1 -v -timeout 300s ./...
 
 test-all: test-unit test-integration ## Run unit + integration tests
 
@@ -59,3 +66,6 @@ validate: build ## Run the full validation suite (unit + integration + smoke)
 	@echo ""
 	@echo "=== Validation Complete ==="
 	@echo "Update docs/version-matrix.md with validated versions."
+
+rc-validate: ## Run full RC validation with evidence capture to artifacts/releases/
+	bash scripts/rc-validate.sh

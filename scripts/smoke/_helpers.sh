@@ -43,10 +43,12 @@ CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-5}"
 http_code_of() {
     local method="$1"; shift
     local url="$1"; shift
-    curl -s -o /dev/null -w "%{http_code}" \
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" \
         -X "$method" \
         --connect-timeout "$CONNECT_TIMEOUT" \
-        "$url" "$@" 2>/dev/null || echo "000"
+        "$url" "$@" 2>/dev/null) || true
+    echo "${code:-000}"
 }
 
 # Usage: http_body GET https://example.com/path [extra curl args...]

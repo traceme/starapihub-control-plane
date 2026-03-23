@@ -18,9 +18,10 @@ Use it to answer:
 
 ## Matrix
 
-| Appliance Version | Control-Plane State | New-API | Bifrost | ClewdR | Patch Count | Validation Status | Notes |
-|------------------|---------------------|---------|---------|--------|-------------|-------------------|-------|
-| `v0.1.0` | Phase 8 | `v0.11.7-4-gd7c5e84f` | `helm-chart-v2.0.14` | `v0.12.23` | `1` | upgrade-check passed | Patch 001 (X-Request-ID propagation) active |
+| Appliance Version | Mode | New-API | Bifrost | ClewdR | Patch Count | Validation Status | Notes |
+|------------------|------|---------|---------|--------|-------------|-------------------|-------|
+| `0.1.0` | appliance | `v0.11.7-4-gd7c5e84f` | `helm-chart-v2.0.14` | `v0.12.23` | `1` | upgrade-check passed | Patch 001 (X-Request-ID propagation) active |
+| `0.2.0` | upstream | `calciumion/new-api@sha256:648622b40a8275ed45eb988b0df3f0a548241b4eea5e2367ad377cd892d31b4a` | `maximhq/bifrost@sha256:0b67d35ef9c71d09c3ccc3eeb844f91e98b1cacd38b004e00c32921e26ad7350` | `clewdr@sha256:12d48e7e17877d0be8b8c6eedcd6bf90f335141921c4f5893848db6ab8f18ea5` | `0` | **PASS (17/17 applicable)** | 2 skips N/A in upstream mode (patched New-API image, Patch 001). Evidence: `artifacts/releases/0.2.0/20260323T113245Z/` |
 
 ## Validation Checklist Per Row
 

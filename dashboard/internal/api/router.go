@@ -68,6 +68,9 @@ func NewRouter(h *Handler, token string, frontendFS fs.FS) http.Handler {
 	mux.Handle("GET /api/wizard/status", authMiddleware(token, http.HandlerFunc(h.HandleWizardStatus)))
 	mux.Handle("GET /api/sse", authMiddleware(token, http.HandlerFunc(h.HandleSSE)))
 
+	// Version (no auth — helps operators verify the running instance)
+	mux.Handle("GET /api/version", http.HandlerFunc(h.HandleVersion))
+
 	// Ops: sync/diff/audit/bootstrap status (reads from CLI audit log)
 	mux.Handle("GET /api/ops/sync", authMiddleware(token, http.HandlerFunc(h.HandleSyncStatus)))
 	mux.Handle("GET /api/ops/diff", authMiddleware(token, http.HandlerFunc(h.HandleDiffStatus)))

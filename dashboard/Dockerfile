@@ -5,13 +5,17 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM golang:1.22-alpine AS backend
+FROM golang:1.24-alpine AS backend
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /build/dist ./frontend/dist
-RUN CGO_ENABLED=0 go build -o dashboard .
+ARG VERSION=dev
+ARG BUILD_DATE=unknown
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-X 'github.com/starapihub/dashboard/internal/buildinfo.Version=${VERSION}' -X 'github.com/starapihub/dashboard/internal/buildinfo.BuildDate=${BUILD_DATE}'" \
+    -o dashboard .
 
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates

@@ -89,6 +89,11 @@ func syncCmd() *cobra.Command {
 			// 4. Create upstream clients
 			httpClient := &http.Client{Timeout: 30 * time.Second}
 			newAPIClient := upstream.NewNewAPIClient(httpClient, newAPIURL)
+			adminUserID := os.Getenv("NEWAPI_ADMIN_USER_ID")
+			if adminUserID == "" {
+				adminUserID = "1"
+			}
+			newAPIClient.SetAdminUserID(adminUserID)
 			bifrostClient := upstream.NewBifrostClient(httpClient, bifrostURL)
 			clewdrClient := upstream.NewClewdRClient(httpClient)
 
@@ -213,6 +218,11 @@ func diffCmd() *cobra.Command {
 			// 4. Create upstream clients
 			httpClient := &http.Client{Timeout: 30 * time.Second}
 			newAPIClient := upstream.NewNewAPIClient(httpClient, newAPIURL)
+			adminUserID := os.Getenv("NEWAPI_ADMIN_USER_ID")
+			if adminUserID == "" {
+				adminUserID = "1"
+			}
+			newAPIClient.SetAdminUserID(adminUserID)
 			bifrostClient := upstream.NewBifrostClient(httpClient, bifrostURL)
 			clewdrClient := upstream.NewClewdRClient(httpClient)
 

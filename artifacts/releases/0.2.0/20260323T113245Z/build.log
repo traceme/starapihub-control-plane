@@ -1,0 +1,1 @@
+cd dashboard && go build -ldflags "-X 'github.com/starapihub/dashboard/internal/buildinfo.Version=0.2.0' -X 'github.com/starapihub/dashboard/internal/buildinfo.BuildDate=2026-03-23T11:32:45Z'" -o starapihub ./cmd/starapihub/

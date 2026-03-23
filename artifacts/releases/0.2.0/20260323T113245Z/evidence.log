@@ -1,0 +1,69 @@
+[11:32:45] ========================================================
+[11:32:45] RC Validation — StarAPIHub v0.2.0
+[11:32:45] Timestamp:  20260323T113245Z
+[11:32:45] Mode:       upstream
+[11:32:45] Topology:   production-like (no local-dev override)
+[11:32:45] Artifacts:  artifacts/releases/0.2.0/20260323T113245Z
+[11:32:45] ========================================================
+[11:32:45] 
+[11:32:45] ── §1 Pre-release ──
+[11:32:45] GATE: VERSION file
+[11:32:45]   PASS: VERSION file
+[11:32:45] GATE: CLI build
+[11:32:45]   PASS: CLI build
+[11:32:46]   Built version: {"build_date":"2026-03-23T11:32:45Z","go_version":"go1.26.1","mode":"upstream","version":"0.2.0"}
+[11:32:46] GATE: go vet
+[11:32:46]   PASS: go vet
+[11:32:46] GATE: unit tests
+[11:32:55]   PASS: unit tests
+[11:32:55] GATE: integration tests
+[11:33:09]   PASS: integration tests
+[11:33:09] 
+[11:33:09] ── §2 Image build ──
+[11:33:09] GATE: dashboard image build
+[11:33:19]   PASS: dashboard image build
+[11:33:19] GATE: patched New-API image build
+[11:33:19]   SKIP: patched New-API image — mode is upstream
+[11:33:19] 
+[11:33:19] ── §3 Validation (live stack) ──
+[11:33:19] GATE: health check
+[11:33:19]   PASS: health check
+[11:33:19] GATE: registry validate
+[11:33:20]   PASS: registry validate
+[11:33:20] GATE: bootstrap
+[11:33:20]   PASS: bootstrap
+[11:33:20] GATE: sync (dry-run)
+[11:33:20]   PASS: sync
+[11:33:20] GATE: diff
+[11:33:20]   PASS: diff
+[11:33:20] GATE: upgrade-check
+[11:33:20]   PASS: upgrade-check
+[11:33:20] GATE: smoke tests
+[11:33:20]   PASS: smoke tests
+[11:33:20] 
+[11:33:20] ── §4 Auditability ──
+[11:33:20] GATE: trace command
+[11:33:20]   PASS: trace
+[11:33:20] GATE: audit log
+[11:33:20]   PASS: audit log exists
+[11:33:20] GATE: Patch 001 (X-Request-ID propagation)
+[11:33:20]   SKIP: Patch 001 — mode is upstream (no patch to verify)
+[11:33:20] 
+[11:33:20] ── §5 Dashboard runtime ──
+[11:33:20] GATE: dashboard /api/version
+[11:33:20]   PASS: dashboard /api/version
+[11:33:20] GATE: dashboard /api/health
+[11:33:20]   PASS: dashboard /api/health
+[11:33:20] 
+[11:33:20] ── Image provenance ──
+[11:33:21]   Image provenance written
+[11:33:21] 
+[11:33:21] ========================================================
+[11:33:21] RC Validation Complete — v0.2.0 (upstream mode)
+[11:33:21]   Result: PARTIAL
+[11:33:21]   Pass:   17 / 19
+[11:33:21]   Fail:   0 / 19
+[11:33:21]   Skip:   2 / 19
+[11:33:21]   Dir:    artifacts/releases/0.2.0/20260323T113245Z
+[11:33:21] ========================================================
+[11:33:21] Summary written to artifacts/releases/0.2.0/20260323T113245Z/summary.md

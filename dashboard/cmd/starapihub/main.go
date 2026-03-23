@@ -33,6 +33,7 @@ func buildRootCmd() *cobra.Command {
 	rootCmd.AddCommand(traceCmd())
 	rootCmd.AddCommand(cookieStatusCmd())
 	rootCmd.AddCommand(upgradeCheckCmd())
+	rootCmd.AddCommand(versionCmd())
 
 	return rootCmd
 }

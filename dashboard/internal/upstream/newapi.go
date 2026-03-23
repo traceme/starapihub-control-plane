@@ -9,12 +9,27 @@ import (
 )
 
 type NewAPIClient struct {
-	client  *http.Client
-	baseURL string
+	client      *http.Client
+	baseURL     string
+	adminUserID string // New-Api-User header value (required for admin endpoints)
 }
 
 func NewNewAPIClient(client *http.Client, baseURL string) *NewAPIClient {
 	return &NewAPIClient{client: client, baseURL: baseURL}
+}
+
+// SetAdminUserID sets the user ID for the New-Api-User header.
+// Required by New-API's admin middleware for all admin API calls.
+func (c *NewAPIClient) SetAdminUserID(id string) {
+	c.adminUserID = id
+}
+
+// setAdminHeaders adds both auth headers required by New-API admin endpoints.
+func (c *NewAPIClient) setAdminHeaders(req *http.Request, adminToken string) {
+	req.Header.Set("Authorization", adminToken)
+	if c.adminUserID != "" {
+		req.Header.Set("New-Api-User", c.adminUserID)
+	}
 }
 
 func (c *NewAPIClient) BaseURL() string {
@@ -60,7 +75,7 @@ func (c *NewAPIClient) ListChannels(adminToken string) (json.RawMessage, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -82,7 +97,7 @@ func (c *NewAPIClient) CreateChannel(adminToken string, channel json.RawMessage)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -105,7 +120,7 @@ func (c *NewAPIClient) DeleteChannel(adminToken string, id string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
@@ -147,7 +162,7 @@ func (c *NewAPIClient) GetOptions(adminToken string) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -205,7 +220,7 @@ func (c *NewAPIClient) ListChannelsTyped(adminToken string) ([]ChannelResponse, 
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Authorization", "Bearer "+adminToken)
+		c.setAdminHeaders(req, adminToken)
 
 		resp, err := doWithRetry(c.client, req)
 		if err != nil {
@@ -246,7 +261,7 @@ func (c *NewAPIClient) GetChannelTyped(adminToken string, id int) (*ChannelRespo
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 
 	resp, err := doWithRetry(c.client, req)
 	if err != nil {
@@ -277,7 +292,7 @@ func (c *NewAPIClient) UpdateChannelTyped(adminToken string, channel json.RawMes
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := doWithRetry(c.client, req)
@@ -316,7 +331,7 @@ func (c *NewAPIClient) PutOption(adminToken string, key string, value string) er
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := doWithRetry(c.client, req)
@@ -351,7 +366,7 @@ func (c *NewAPIClient) GetOptionsTyped(adminToken string) ([]OptionEntry, error)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	c.setAdminHeaders(req, adminToken)
 
 	resp, err := doWithRetry(c.client, req)
 	if err != nil {

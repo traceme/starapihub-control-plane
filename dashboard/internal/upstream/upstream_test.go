@@ -80,8 +80,11 @@ func TestNewAPIClient_ListChannels(t *testing.T) {
 		if r.Method != "GET" {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		if r.Header.Get("Authorization") != "Bearer admin-token" {
-			t.Error("missing or wrong Authorization header")
+		if r.Header.Get("Authorization") != "admin-token" {
+			t.Errorf("missing or wrong Authorization header: got %q", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("New-Api-User") != "1" {
+			t.Errorf("missing or wrong New-Api-User header: got %q", r.Header.Get("New-Api-User"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"data":[]}`))
@@ -89,6 +92,7 @@ func TestNewAPIClient_ListChannels(t *testing.T) {
 	defer ts.Close()
 
 	c := NewNewAPIClient(ts.Client(), ts.URL)
+	c.SetAdminUserID("1")
 	body, err := c.ListChannels("admin-token")
 	if err != nil {
 		t.Fatalf("ListChannels: %v", err)
