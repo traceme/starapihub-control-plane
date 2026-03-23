@@ -1,0 +1,96 @@
+docker build -t starapihub/new-api:patched -f deploy/Dockerfile.new-api-patched ../new-api
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.new-api-patched
+#1 transferring dockerfile: 1.38kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian:bookworm-slim
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/golang:alpine
+#3 DONE 0.3s
+
+#4 [internal] load metadata for docker.io/oven/bun:latest
+#4 ...
+
+#5 [auth] oven/bun:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/oven/bun:latest
+#4 DONE 1.6s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 130B done
+#6 DONE 0.0s
+
+#7 [backend 1/7] FROM docker.io/library/golang:alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039
+#7 resolve docker.io/library/golang:alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 0.0s done
+#7 DONE 0.0s
+
+#8 [stage-2 1/4] FROM docker.io/library/debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+#8 resolve docker.io/library/debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a done
+#8 DONE 0.0s
+
+#9 [frontend 1/7] FROM docker.io/oven/bun:latest@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7
+#9 resolve docker.io/oven/bun:latest@sha256:0733e50325078969732ebe3b15ce4c4be5082f18c4ac1a0f0ca4839c2e4e42a7 0.0s done
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 62.34kB 0.0s done
+#10 DONE 0.0s
+
+#11 [frontend 5/7] COPY ./web .
+#11 CACHED
+
+#12 [backend 5/7] COPY . .
+#12 CACHED
+
+#13 [frontend 3/7] COPY web/package.json web/bun.lock ./
+#13 CACHED
+
+#14 [frontend 6/7] COPY ./VERSION .
+#14 CACHED
+
+#15 [backend 6/7] COPY --from=frontend /build/dist ./web/dist
+#15 CACHED
+
+#16 [frontend 4/7] RUN bun install
+#16 CACHED
+
+#17 [stage-2 2/4] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/*
+#17 CACHED
+
+#18 [backend 2/7] WORKDIR /build
+#18 CACHED
+
+#19 [frontend 7/7] RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
+#19 CACHED
+
+#20 [backend 7/7] RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)-patched'" -o new-api
+#20 CACHED
+
+#21 [backend 4/7] RUN go mod download
+#21 CACHED
+
+#22 [frontend 2/7] WORKDIR /build
+#22 CACHED
+
+#23 [backend 3/7] COPY go.mod go.sum ./
+#23 CACHED
+
+#24 [stage-2 3/4] COPY --from=backend /build/new-api /usr/local/bin/new-api
+#24 CACHED
+
+#25 [stage-2 4/4] WORKDIR /app
+#25 CACHED
+
+#26 exporting to image
+#26 exporting layers done
+#26 exporting manifest sha256:43d12693fbff0d20c89ef7e2c5c8de0dd800eaeff77c5756c442ea74ee8fcc85 done
+#26 exporting config sha256:890d3deeb617761938d8a31bbaac87101ddebb0a3e01c177da61723871e9576f done
+#26 exporting attestation manifest sha256:eaa5f2f2c7fd8f700976b2a09e39a00b4940ff0fef275b8fdb08efe21e1a6960 done
+#26 exporting manifest list sha256:e92f5b33799852c6fce988857b71501682c109c83a768be49380e9b85dce4470 done
+#26 naming to docker.io/starapihub/new-api:patched done
+#26 unpacking to docker.io/starapihub/new-api:patched done
+#26 DONE 0.0s

@@ -1,0 +1,11 @@
+Bootstrap Report
+==================================================
+  [OK] validate-prereqs     All prerequisites validated
+  [OK] wait-services          bifrost (http://127.0.0.1:8080): healthy
+  new-api (http://127.0.0.1:3000): healthy
+
+  [OK] seed-admin           Admin account 'root' created
+  [SKIP] run-sync             skipped by --skip-sync
+  [SKIP] verify-health        skipped by --skip-sync
+==================================================
+Bootstrap complete.

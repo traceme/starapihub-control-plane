@@ -1,0 +1,84 @@
+========================================
+  Control Plane Smoke Test Suite
+========================================
+  NEWAPI_URL:  http://127.0.0.1:3000
+  BIFROST_URL: http://127.0.0.1:8080
+  CLEWDR_URL:  http://localhost:8484
+  SERVER_IP:   localhost
+  API_KEY:     not set
+========================================
+
+
+=== Smoke: New-API Health ===
+  [INFO] Target: http://127.0.0.1:3000
+  [PASS] /api/status returned 200
+  [PASS] Root path returned 200
+  [SKIP] /v1/models check skipped (no API_KEY set)
+  [SKIP] Chat completions check skipped (no API_KEY set)
+
+check-newapi.sh: 2 passed, 0 failed, 2 skipped
+
+
+=== Smoke: Bifrost Health and Isolation ===
+  [INFO] Internal URL: http://127.0.0.1:8080
+  [INFO] Public IP for isolation check: localhost
+  [PASS] Bifrost /health returned 200 (internal)
+  [SKIP] Public isolation check skipped (SERVER_IP is localhost; set to public IP to test)
+
+check-bifrost.sh: 1 passed, 0 failed, 1 skipped
+
+
+=== Smoke: ClewdR Network Isolation (negative test) ===
+  [INFO] SERVER_IP is 'localhost'. For a meaningful isolation test,
+  [INFO] set SERVER_IP to the public-facing IP of the deployment host.
+  [INFO] Proceeding anyway — testing localhost reachability.
+  [INFO] Probing ClewdR ports on localhost: 8484 18484 18485 18486
+  [PASS] ClewdR port 8484: not reachable (connection refused/timeout)
+  [PASS] ClewdR port 18484: not reachable (connection refused/timeout)
+  [PASS] ClewdR port 18485: not reachable (connection refused/timeout)
+  [PASS] ClewdR port 18486: not reachable (connection refused/timeout)
+  [INFO] 
+  [INFO] Verifying ClewdR is alive internally (via CLEWDR_URL=http://localhost:8484)...
+  [SKIP] ClewdR not reachable internally at http://localhost:8484 (may need docker exec)
+  [INFO] Try: docker exec <newapi-container> wget -qO- http://clewdr-1:8484/
+
+check-clewdr-isolation.sh: 4 passed, 0 failed, 1 skipped
+
+
+=== Smoke: Logical Model Resolution ===
+  [INFO] Target: http://127.0.0.1:3000
+  [SKIP] API_KEY is required for logical model tests
+
+check-logical-models.sh: 0 passed, 0 failed, 1 skipped
+
+
+=== Smoke: X-Request-ID Correlation ===
+  [INFO] Target: http://127.0.0.1:3000
+  [SKIP] API_KEY is required for correlation test
+
+check-correlation.sh: 0 passed, 0 failed, 1 skipped
+
+
+=== Smoke: Fallback Behavior ===
+  [INFO] Target: http://127.0.0.1:3000
+  [SKIP] API_KEY is required for fallback test
+
+check-fallback.sh: 0 passed, 0 failed, 1 skipped
+
+
+========================================
+  Summary
+========================================
+  Test                            Result
+  ------------------------------  ------
+  check-newapi                    PASS
+  check-bifrost                   PASS
+  check-clewdr-isolation          PASS
+  check-logical-models            PASS
+  check-correlation               PASS
+  check-fallback                  PASS
+  ------------------------------  ------
+  Passed: 6  Failed: 0  Skipped: 0
+========================================
+
+All smoke tests passed.

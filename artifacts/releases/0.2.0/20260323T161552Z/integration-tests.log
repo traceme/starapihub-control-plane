@@ -1,0 +1,253 @@
+cd dashboard && go build -ldflags "-X 'github.com/starapihub/dashboard/internal/buildinfo.Version=0.2.0' -X 'github.com/starapihub/dashboard/internal/buildinfo.BuildDate=2026-03-23T16:16:04Z'" -o starapihub ./cmd/starapihub/
+cd tests/integration && INTEGRATION=1 go test -count=1 -v -timeout 300s ./...
+ Network compose_default Creating 
+ Network compose_default Created 
+ Container test-postgres Creating 
+ Container test-bifrost Creating 
+ Container test-redis Creating 
+ Container test-bifrost Created 
+ Container test-postgres Created 
+ Container test-redis Created 
+ Container test-new-api Creating 
+ Container test-new-api Created 
+ Container test-redis Starting 
+ Container test-postgres Starting 
+ Container test-bifrost Starting 
+ Container test-postgres Started 
+ Container test-redis Started 
+ Container test-redis Waiting 
+ Container test-postgres Waiting 
+ Container test-bifrost Started 
+ Container test-postgres Healthy 
+ Container test-redis Healthy 
+ Container test-new-api Starting 
+ Container test-new-api Started 
+ Container test-bifrost Waiting 
+ Container test-postgres Waiting 
+ Container test-redis Waiting 
+ Container test-new-api Waiting 
+ Container test-redis Healthy 
+ Container test-postgres Healthy 
+ Container test-bifrost Healthy 
+ Container test-new-api Healthy 
+  [OK] new-api healthy
+  [OK] bifrost healthy
+=== RUN   TestHealth_ReportsServiceStatus
+    cli_test.go:168: health output:
+          [OK] bifrost      http://127.0.0.1:18080
+          [OK] new-api      http://127.0.0.1:13000
+    cli_test.go:169: exit code: 0
+--- PASS: TestHealth_ReportsServiceStatus (0.77s)
+=== RUN   TestHealth_JSONOutput
+    cli_test.go:181: health JSON output:
+        [
+          {
+            "name": "bifrost",
+            "url": "http://127.0.0.1:18080",
+            "healthy": true,
+            "response_time": 3943583
+          },
+          {
+            "name": "new-api",
+            "url": "http://127.0.0.1:13000",
+            "healthy": true,
+            "response_time": 5222666
+          }
+        ]
+--- PASS: TestHealth_JSONOutput (0.02s)
+=== RUN   TestBootstrap_SeedsAdminAndSyncs
+    cli_test.go:202: bootstrap stdout:
+        Bootstrap Report
+        ==================================================
+          [OK] validate-prereqs     All prerequisites validated
+          [OK] wait-services          bifrost (http://127.0.0.1:18080): healthy
+          new-api (http://127.0.0.1:13000): healthy
+        
+          [OK] seed-admin           Admin account 'root' created
+          [FAIL] run-sync             sync completed with 3 failures out of 4 actions
+        ==================================================
+        Bootstrap failed. See above for details.
+    cli_test.go:203: bootstrap stderr:
+    cli_test.go:204: exit code: 1
+    cli_test.go:217: audit log content:
+        {"timestamp":"2026-03-23T16:16:18Z","operation":"bootstrap","targets":null,"total_actions":4,"succeeded":0,"failed":3,"drift_warnings":1,"skipped":0,"duration_ms":30,"changes":[{"resource_type":"provider","resource_id":"test-openai","action":"create","status":"failed","desired":{"keys":[{"id":"test-key-1","name":"","models":["gpt-4o-mini"],"weight":0}],"network_config":{"base_url":"https://api.openai.com/v1","default_request_timeout_in_seconds":0,"max_retries":0,"retry_backoff_initial":0,"retry_backoff_max":0}},"error":"create provider test-openai: status 400"},{"resource_type":"routing-rule","resource_id":"plan-error","action":"","status":"failed","error":"plan routing-rule: RoutingRuleReconciler.Plan: desired must be map[string]registry.RoutingRuleDesired, got \u003cnil\u003e"},{"resource_type":"channel","resource_id":"bifrost-test","action":"create","status":"unverified","desired":{"name":"bifrost-test","type":8,"base_url":"http://test-bifrost:8080","models":"gpt-4o-mini,claude-sonnet","group":"default","status":1}},{"resource_type":"pricing","resource_id":"ModelRatio","action":"update","status":"failed","desired":{"gpt-4o-mini":{"model_ratio":0.075}},"error":"put option ModelRatio: API error: 无权进行此操作，access token 无效"}],"bootstrap_steps":[{"name":"validate-prereqs","status":"ok","message":"All prerequisites validated"},{"name":"wait-services","status":"ok","message":"  bifrost (http://127.0.0.1:18080): healthy\n  new-api (http://127.0.0.1:13000): healthy\n"},{"name":"seed-admin","status":"ok","message":"Admin account 'root' created"},{"name":"run-sync","status":"failed","message":"sync completed with 3 failures out of 4 actions"}],"bootstrap_ok":false}
+--- PASS: TestBootstrap_SeedsAdminAndSyncs (0.04s)
+=== RUN   TestSync_DryRunShowsActions
+    cli_test.go:234: sync --dry-run output:
+        Sync complete: 0 succeeded, 1 failed, 0 drift warnings, 3 skipped
+        
+        RESOURCE TYPE    RESOURCE ID              ACTION     STATUS       DETAILS
+        --------------------------------------------------------------------------------
+        provider         test-openai              create     skipped      
+        routing-rule     plan-error                          failed       plan routing-rule: RoutingRuleReconciler.Plan: desired must be map[string]registry.RoutingRuleDesired, got <nil>
+        channel          bifrost-test             create     skipped      
+        pricing          ModelRatio               update     skipped      
+        
+    cli_test.go:235: exit code: 2
+--- PASS: TestSync_DryRunShowsActions (0.02s)
+=== RUN   TestSync_DryRunJSON
+    cli_test.go:259: sync --dry-run JSON:
+        {
+          "total_actions": 4,
+          "succeeded": 0,
+          "failed": 1,
+          "drift_warnings": 0,
+          "skipped": 3,
+          "results": [
+            {
+              "resource_type": "provider",
+              "resource_id": "test-openai",
+              "action": "create",
+              "status": "skipped"
+            },
+            {
+              "resource_type": "routing-rule",
+              "resource_id": "plan-error",
+              "action": "",
+              "status": "failed",
+              "error": "plan routing-rule: RoutingRuleReconciler.Plan: desired must be map[string]registry.RoutingRuleDesired, got \u003cnil\u003e"
+            },
+            {
+              "resource_type": "channel",
+              "resource_id": "bifrost-test",
+              "action": "create",
+              "status": "skipped"
+            },
+            {
+              "resource_type": "pricing",
+              "resource_id": "ModelRatio",
+              "action": "update",
+              "status": "skipped",
+              "diff": "gpt-4o-mini: added=0.075"
+            }
+          ]
+        }
+    cli_test.go:260: exit code: 2
+--- PASS: TestSync_DryRunJSON (0.02s)
+=== RUN   TestSync_TargetNormalization
+    cli_test.go:282: sync --target channels,providers:
+        Sync complete: 0 succeeded, 0 failed, 0 drift warnings, 2 skipped
+        
+        RESOURCE TYPE    RESOURCE ID              ACTION     STATUS       DETAILS
+        --------------------------------------------------------------------------------
+        provider         test-openai              create     skipped      
+        channel          bifrost-test             create     skipped      
+        
+--- PASS: TestSync_TargetNormalization (0.01s)
+=== RUN   TestSync_UnknownTargetErrors
+--- PASS: TestSync_UnknownTargetErrors (0.01s)
+=== RUN   TestSync_ApplyWithAuditLog
+    cli_test.go:313: sync apply output:
+        Sync complete: 0 succeeded, 3 failed, 1 drift warnings, 0 skipped
+        
+        RESOURCE TYPE    RESOURCE ID              ACTION     STATUS       DETAILS
+        --------------------------------------------------------------------------------
+        provider         test-openai              create     failed       create provider test-openai: status 400
+        routing-rule     plan-error                          failed       plan routing-rule: RoutingRuleReconciler.Plan: desired must be map[string]registry.RoutingRuleDesired, got <nil>
+        channel          bifrost-test             create     unverified   read-back failed: list channels typed: API error: 无权进行此操作，access token 无效
+        pricing          ModelRatio               update     failed       put option ModelRatio: API error: 无权进行此操作，access token 无效
+        
+    cli_test.go:314: exit code: 2
+    cli_test.go:318: audit log:
+        {"timestamp":"2026-03-23T16:16:18Z","operation":"sync","targets":null,"total_actions":4,"succeeded":0,"failed":3,"drift_warnings":1,"skipped":0,"duration_ms":7,"changes":[{"resource_type":"provider","resource_id":"test-openai","action":"create","status":"failed","desired":{"keys":[{"id":"test-key-1","name":"","models":["gpt-4o-mini"],"weight":0}],"network_config":{"base_url":"https://api.openai.com/v1","default_request_timeout_in_seconds":0,"max_retries":0,"retry_backoff_initial":0,"retry_backoff_max":0}},"error":"create provider test-openai: status 400"},{"resource_type":"routing-rule","resource_id":"plan-error","action":"","status":"failed","error":"plan routing-rule: RoutingRuleReconciler.Plan: desired must be map[string]registry.RoutingRuleDesired, got \u003cnil\u003e"},{"resource_type":"channel","resource_id":"bifrost-test","action":"create","status":"unverified","desired":{"name":"bifrost-test","type":8,"base_url":"http://test-bifrost:8080","models":"gpt-4o-mini,claude-sonnet","group":"default","status":1}},{"resource_type":"pricing","resource_id":"ModelRatio","action":"update","status":"failed","desired":{"gpt-4o-mini":{"model_ratio":0.075}},"error":"put option ModelRatio: API error: 无权进行此操作，access token 无效"}]}
+--- PASS: TestSync_ApplyWithAuditLog (0.01s)
+=== RUN   TestDiff_ProducesDriftReport
+    cli_test.go:331: diff output:
+        Drift Report (2026-03-23 09:16:18 UTC)
+        [1mVerdict: [31mBLOCKING[0m | 2 blocking, 1 warning, 0 informational | 4 resources checked, 3 drifted
+        
+        --- provider ---
+        [31m[BLOCKING][0m test-openai :: (missing) -- needs to be created
+        --- channel ---
+        [31m[BLOCKING][0m bifrost-test :: (missing) -- needs to be created
+        --- pricing ---
+        [33m[WARNING][0m ModelRatio :: gpt-4o-mini:  -> 0.075
+        
+    cli_test.go:332: exit code: 2
+--- PASS: TestDiff_ProducesDriftReport (0.01s)
+=== RUN   TestDiff_JSONOutput
+    cli_test.go:352: diff JSON:
+        {
+          "timestamp": "2026-03-23T09:16:18-07:00",
+          "summary": {
+            "total_resources": 4,
+            "drifted_resources": 3,
+            "informational_count": 0,
+            "warning_count": 1,
+            "blocking_count": 2,
+            "verdict": "blocking"
+          },
+          "entries": [
+            {
+              "resource_type": "provider",
+              "resource_id": "test-openai",
+              "action_type": "create",
+              "field": "(missing)",
+              "desired_value": "(to be created)",
+              "live_value": "(absent)",
+              "severity": "blocking"
+            },
+            {
+              "resource_type": "channel",
+              "resource_id": "bifrost-test",
+              "action_type": "create",
+              "field": "(missing)",
+              "desired_value": "(to be created)",
+              "live_value": "(absent)",
+              "severity": "blocking"
+            },
+            {
+              "resource_type": "pricing",
+              "resource_id": "ModelRatio",
+              "action_type": "update",
+              "field": "gpt-4o-mini",
+              "desired_value": "0.075",
+              "live_value": "",
+              "severity": "warning"
+            }
+          ]
+        }
+--- PASS: TestDiff_JSONOutput (0.01s)
+=== RUN   TestDiff_TargetFilterWorks
+    cli_test.go:373: diff --target channel:
+        Drift Report (2026-03-23 09:16:18 UTC)
+        [1mVerdict: [31mBLOCKING[0m | 1 blocking, 0 warning, 0 informational | 1 resources checked, 1 drifted
+        
+        --- channel ---
+        [31m[BLOCKING][0m bifrost-test :: (missing) -- needs to be created
+        
+--- PASS: TestDiff_TargetFilterWorks (0.01s)
+=== RUN   TestValidate_ValidFixtures
+    cli_test.go:385: validate output:
+    cli_test.go:389: validate failed (may be missing schemas in fixture dir)
+--- PASS: TestValidate_ValidFixtures (0.01s)
+=== RUN   TestPatch001_XRequestIDPropagation
+    cli_test.go:423: Response status: 401
+    cli_test.go:424: Response body: {"error":{"code":"","message":"无效的令牌 (request id: 20260323161618664439511vHJvHZBO)","type":"new_api_error"}}
+    cli_test.go:425: Response headers: map[Content-Length:[118] Content-Type:[application/json; charset=utf-8] Date:[Mon, 23 Mar 2026 16:16:18 GMT] X-New-Api-Version:[v0.11.7] X-Oneapi-Request-Id:[20260323161618664439511vHJvHZBO]]
+    cli_test.go:451: X-Oneapi-Request-Id = 20260323161618664439511vHJvHZBO (sent: e2e-test-1774282578665268000)
+    cli_test.go:452: New-API generated its own ID instead of using the incoming one.
+    cli_test.go:453: This suggests Patch 001 may not be applied to the running image.
+    cli_test.go:454: (Expected if using upstream image without the patch)
+    cli_test.go:463: Bifrost logs do not contain e2e-test-1774282578665268000 (expected if request didn't reach Bifrost)
+--- PASS: TestPatch001_XRequestIDPropagation (0.02s)
+PASS
+ Container test-new-api Stopping 
+ Container test-bifrost Stopping 
+ Container test-new-api Stopped 
+ Container test-new-api Removing 
+ Container test-new-api Removed 
+ Container test-redis Stopping 
+ Container test-postgres Stopping 
+ Container test-bifrost Stopped 
+ Container test-bifrost Removing 
+ Container test-bifrost Removed 
+ Container test-postgres Stopped 
+ Container test-postgres Removing 
+ Container test-postgres Removed 
+ Container test-redis Stopped 
+ Container test-redis Removing 
+ Container test-redis Removed 
+ Network compose_default Removing 
+ Network compose_default Removed 
+ok  	github.com/starapihub/integration-tests	14.158s

@@ -1,0 +1,70 @@
+[16:15:52] ========================================================
+[16:15:52] RC Validation — StarAPIHub v0.2.0
+[16:15:52] Timestamp:  20260323T161552Z
+[16:15:52] Mode:       appliance
+[16:15:52] Topology:   production-like (no local-dev override)
+[16:15:52] Artifacts:  artifacts/releases/0.2.0/20260323T161552Z
+[16:15:52] ========================================================
+[16:15:52] 
+[16:15:52] ── §1 Pre-release ──
+[16:15:52] GATE: VERSION file
+[16:15:52]   PASS: VERSION file
+[16:15:52] GATE: CLI build
+[16:15:53]   PASS: CLI build
+[16:15:55]   Built version: {"build_date":"2026-03-23T16:15:52Z","go_version":"go1.26.1","mode":"appliance","version":"0.2.0"}
+[16:15:55] GATE: go vet
+[16:15:55]   PASS: go vet
+[16:15:55] GATE: unit tests
+[16:16:04]   PASS: unit tests
+[16:16:04] GATE: integration tests
+[16:16:19]   PASS: integration tests
+[16:16:19] 
+[16:16:19] ── §2 Image build ──
+[16:16:19] GATE: dashboard image build
+[16:16:28]   PASS: dashboard image build
+[16:16:28] GATE: patched New-API image build
+[16:16:30]   PASS: patched New-API image
+[16:16:30] 
+[16:16:30] ── §3 Validation (live stack) ──
+[16:16:30] GATE: health check
+[16:16:30]   PASS: health check
+[16:16:30] GATE: registry validate
+[16:16:30]   PASS: registry validate
+[16:16:30] GATE: bootstrap
+[16:16:30]   PASS: bootstrap
+[16:16:30] GATE: sync (dry-run)
+[16:16:30]   PASS: sync
+[16:16:30] GATE: diff
+[16:16:30]   PASS: diff
+[16:16:30] GATE: upgrade-check
+[16:16:30]   PASS: upgrade-check
+[16:16:30] GATE: smoke tests
+[16:16:31]   PASS: smoke tests
+[16:16:31] 
+[16:16:31] ── §4 Auditability ──
+[16:16:31] GATE: trace command
+[16:16:31]   PASS: trace
+[16:16:31] GATE: audit log
+[16:16:31]   PASS: audit log exists
+[16:16:31] GATE: Patch 001 (X-Request-ID propagation)
+[16:16:31]   PASS: Patch 001
+[16:16:31]   PASS: Patch 001 backward compat
+[16:16:31] 
+[16:16:31] ── §5 Dashboard runtime ──
+[16:16:31] GATE: dashboard /api/version
+[16:16:31]   PASS: dashboard /api/version
+[16:16:31] GATE: dashboard /api/health
+[16:16:31]   PASS: dashboard /api/health
+[16:16:31] 
+[16:16:31] ── Image provenance ──
+[16:16:31]   Image provenance written
+[16:16:31] 
+[16:16:31] ========================================================
+[16:16:31] RC Validation Complete — v0.2.0 (appliance mode)
+[16:16:31]   Result: PASS
+[16:16:31]   Pass:   20 / 20
+[16:16:31]   Fail:   0 / 20
+[16:16:31]   Skip:   0 / 20
+[16:16:31]   Dir:    artifacts/releases/0.2.0/20260323T161552Z
+[16:16:31] ========================================================
+[16:16:31] Summary written to artifacts/releases/0.2.0/20260323T161552Z/summary.md
