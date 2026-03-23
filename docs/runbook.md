@@ -235,7 +235,7 @@ starapihub sync
 # 5. If sync fails on a specific target, run with that target only
 starapihub sync --target providers
 starapihub sync --target channels
-starapihub sync --target routing
+starapihub sync --target routing-rule
 ```
 
 ### Verification
@@ -285,7 +285,7 @@ done
 #    - Extract session cookies
 
 # 2. Push new cookies via API
-starapihub sync --target cookies
+starapihub sync --target cookie
 
 # 3. Or push directly to a specific instance
 curl -X POST http://clewdr-1:8484/api/cookies \
