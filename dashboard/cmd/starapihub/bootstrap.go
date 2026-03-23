@@ -119,9 +119,11 @@ func bootstrapCmd() *cobra.Command {
 			if !noAudit && !dryRun {
 				auditLogger := audit.NewLogger(auditLog)
 				bootDuration := time.Since(bootStartTime)
-				// Bootstrap doesn't expose SyncReport directly; write a summary entry
-				simpleReport := &syncpkg.SyncReport{}
-				if auditErr := auditLogger.Write(simpleReport, "bootstrap", nil, bootDuration); auditErr != nil {
+				syncReport := report.SyncReport
+				if syncReport == nil {
+					syncReport = &syncpkg.SyncReport{}
+				}
+				if auditErr := auditLogger.Write(syncReport, "bootstrap", nil, bootDuration); auditErr != nil {
 					if verbose {
 						fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: audit log write failed: %v\n", auditErr)
 					}

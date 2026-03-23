@@ -82,8 +82,9 @@ type SyncDeps struct {
 
 // BootstrapReport contains per-step results from a full bootstrap run.
 type BootstrapReport struct {
-	Steps   []StepResult `json:"steps"`
-	Success bool         `json:"success"`
+	Steps      []StepResult        `json:"steps"`
+	Success    bool                `json:"success"`
+	SyncReport *syncpkg.SyncReport `json:"sync_report,omitempty"`
 }
 
 // AddStep appends a step result and updates Success.
@@ -96,11 +97,12 @@ func (r *BootstrapReport) AddStep(step *StepResult) {
 
 // Bootstrapper orchestrates the bootstrap sequence.
 type Bootstrapper struct {
-	opts          BootstrapOptions
-	newAPIClient  *upstream.NewAPIClient
-	bifrostClient *upstream.BifrostClient
-	clewdrClient  *upstream.ClewdRClient
-	syncDeps      *SyncDeps
+	opts           BootstrapOptions
+	newAPIClient   *upstream.NewAPIClient
+	bifrostClient  *upstream.BifrostClient
+	clewdrClient   *upstream.ClewdRClient
+	syncDeps       *SyncDeps
+	lastSyncReport *syncpkg.SyncReport // captured by RunSync for audit log
 }
 
 // New creates a new Bootstrapper with the given options.
@@ -395,6 +397,7 @@ func (b *Bootstrapper) RunSync() *StepResult {
 	if err != nil {
 		return &StepResult{Name: "run-sync", Status: "failed", Message: fmt.Sprintf("sync engine error: %v", err), Duration: time.Since(start)}
 	}
+	b.lastSyncReport = report
 	if report.Failed > 0 {
 		return &StepResult{
 			Name: "run-sync", Status: "failed",
@@ -496,6 +499,7 @@ func (b *Bootstrapper) Run(ctx context.Context) *BootstrapReport {
 	} else {
 		step = b.RunSync()
 		report.AddStep(step)
+		report.SyncReport = b.lastSyncReport // capture for audit log
 		if step.Status == "failed" {
 			return report
 		}
