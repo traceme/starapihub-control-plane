@@ -134,6 +134,8 @@ docker logs cp-postgres --tail 100
 
 ## Emergency Procedures
 
+> For failure drills to practice these scenarios, see `docs/failure-drills.md`.
+
 ### Everything is Down
 
 ```bash
@@ -194,6 +196,237 @@ docker-compose --env-file env/common.env restart clewdr-1 clewdr-2 clewdr-3
 
 # If cookies are all expired, see ClewdR operations doc for rotation
 ```
+
+## Sync Failure Recovery
+
+### Symptoms
+
+- `starapihub sync` exits with non-zero code
+- Audit log (`~/.starapihub/audit.log`) shows entries with `"failed" > 0`
+- Partial state: some resources updated, others not
+
+### Diagnosis
+
+```bash
+# Check the last sync audit entry
+tail -1 ~/.starapihub/audit.log | jq .
+
+# Look for failed changes
+tail -1 ~/.starapihub/audit.log | jq '.changes[] | select(.status == "failed")'
+
+# Check which targets had issues
+tail -1 ~/.starapihub/audit.log | jq '{targets: .targets, failed: .failed, succeeded: .succeeded}'
+```
+
+### Resolution
+
+```bash
+# 1. Check service health first (sync may have failed due to a down service)
+starapihub health
+
+# 2. If a service is down, fix it first (see Emergency Procedures above)
+
+# 3. Run diff to see current drift state
+starapihub diff
+
+# 4. Re-run sync (idempotent -- safe to retry)
+starapihub sync
+
+# 5. If sync fails on a specific target, run with that target only
+starapihub sync --target providers
+starapihub sync --target channels
+starapihub sync --target routing
+```
+
+### Verification
+
+```bash
+# Verify sync is clean (no changes needed)
+starapihub sync --dry-run
+# Should show 0 changes
+
+# Verify no blocking drift
+starapihub diff
+```
+
+### Prevention
+
+- Run `starapihub health` before sync operations
+- Monitor audit log for failed entries (see `docs/monitoring.md`)
+- Sync is idempotent -- running it twice is always safe
+
+## Cookie Exhaustion
+
+### Symptoms
+
+- `starapihub cookie-status` shows 0 valid cookies
+- Risky tier requests returning 502 errors
+- Standard tier ClewdR fallback unavailable
+- Dashboard alerts: "CRITICAL: clewdr-X has 0 valid cookies"
+
+### Diagnosis
+
+```bash
+# Check cookie inventory
+starapihub cookie-status
+
+# Check each ClewdR instance directly
+for i in 1 2 3; do
+  echo "=== ClewdR $i ==="
+  curl -s http://clewdr-$i:8484/api/status | jq '.cookies'
+done
+```
+
+### Resolution
+
+```bash
+# 1. Obtain fresh Claude.ai cookies (manual browser step)
+#    - Log into claude.ai in a browser
+#    - Extract session cookies
+
+# 2. Push new cookies via API
+starapihub sync --target cookies
+
+# 3. Or push directly to a specific instance
+curl -X POST http://clewdr-1:8484/api/cookies \
+  -H "Authorization: Bearer $CLEWDR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cookie": "sessionKey=sk-ant-..."}'
+
+# 4. Verify cookies are valid
+starapihub cookie-status
+```
+
+### Verification
+
+```bash
+# Confirm valid cookie count is above threshold
+starapihub cookie-status --min-valid 2
+# Should exit 0
+
+# Send a test request through risky tier
+curl -s https://localhost/v1/chat/completions \
+  -H "Authorization: Bearer $TEST_TOKEN" \
+  -d '{"model":"lab-claude","messages":[{"role":"user","content":"test"}],"max_tokens":5}'
+```
+
+### Prevention
+
+- Monitor cookie status on cron (see `docs/monitoring.md`)
+- Rotate cookies proactively before they expire
+- Keep spare cookies ready
+- See `docs/clewdr-operations.md` for rotation procedure
+
+## Drift Detected
+
+### Symptoms
+
+- `starapihub diff` exits non-zero
+- Monitoring alert: "Blocking drift detected"
+- Configuration has diverged from desired state YAML
+
+### Diagnosis
+
+```bash
+# See full drift report
+starapihub diff
+
+# Get structured report for analysis
+starapihub diff --output json | jq '.items[] | select(.severity == "blocking")'
+
+# Common drift causes:
+# - Someone changed config via upstream UI
+# - An upstream restart reset config to defaults
+# - Desired state YAML was updated but sync not run
+```
+
+### Resolution
+
+Operator must decide: re-sync (overwrite live with desired) or investigate first.
+
+```bash
+# Option A: Re-sync to enforce desired state
+starapihub sync --dry-run    # Preview changes first
+starapihub sync              # Apply
+
+# Option B: If live state is intentionally different, update desired state
+# Edit the relevant YAML file in policies/
+vim policies/provider-pools.yaml
+starapihub validate          # Verify YAML is valid
+starapihub diff              # Confirm drift resolved
+```
+
+### Verification
+
+```bash
+# Confirm no blocking drift remains
+starapihub diff
+# Should exit 0 (no blocking drift)
+```
+
+### Prevention
+
+- Never make changes via upstream UIs -- always use desired state YAML + sync
+- Run drift checks on cron (see `docs/monitoring.md`)
+- After any manual intervention, re-run sync to restore desired state
+
+## Upgrade Rollback
+
+### Symptoms
+
+- Service unhealthy after version upgrade
+- New errors appearing in logs after image tag change
+- Smoke tests failing after upgrade
+
+### Diagnosis
+
+```bash
+# Check which version is running
+docker inspect cp-new-api --format '{{.Config.Image}}'
+docker inspect cp-bifrost --format '{{.Config.Image}}'
+
+# Check logs for errors
+docker logs cp-new-api --tail 50
+docker logs cp-bifrost --tail 50
+
+# Run health check
+starapihub health
+```
+
+### Resolution
+
+```bash
+# 1. Revert the version in deploy/env/common.env to the previous version
+#    e.g., NEWAPI_VERSION=v1.2.2 (was v1.2.3)
+
+# 2. Pull old image and recreate
+cd control-plane/deploy
+docker-compose --env-file env/common.env pull <service>
+docker-compose --env-file env/common.env up -d <service>
+
+# 3. For New-API database rollback (if migration broke things):
+docker exec -i cp-postgres psql -U newapi newapi < backup-YYYYMMDD.sql
+docker-compose --env-file env/common.env restart new-api
+
+# 4. Re-run sync to ensure config matches
+starapihub sync
+```
+
+### Verification
+
+```bash
+starapihub health          # All services healthy
+starapihub diff            # No blocking drift
+bash scripts/smoke/run-all.sh  # Smoke tests pass
+```
+
+### Prevention
+
+- Always backup before upgrading (see `docs/upgrade-strategy.md`)
+- Upgrade in staging first
+- Pin versions, never use `latest`
+- Follow the full upgrade workflow in `docs/upgrade-strategy.md`
+- For commercial appliance mode, also follow `docs/upgrade-strategy-commercial-appliance.md`
 
 ## Incident Response
 
