@@ -4,7 +4,9 @@
 
 This document describes how to roll out the control plane stack from initial development through production. Each phase has clear entry criteria, deliverables, and exit criteria. The operator should not advance to the next phase until the current phase's exit criteria are met.
 
-The guiding principle at every phase is the same: upstream source code (New-API, Bifrost, ClewdR) is never modified. Integration happens only through configuration, environment variables, APIs, and deployment orchestration.
+The guiding principle at every phase is the same: external integration comes first. Integration should happen through configuration, environment variables, APIs, and deployment orchestration unless a commercial-appliance requirement cannot be met that way.
+
+For the stricter commercial-appliance target, a tiny upstream patch set is allowed only after the patch-audit workflow is completed. See [patch-audit-workflow.md](/Users/mac/projects/OpenRouterAround/starapihub/control-plane/docs/patch-audit-workflow.md).
 
 ## Phase 0: Local Development
 
@@ -258,6 +260,188 @@ The guiding principle at every phase is the same: upstream source code (New-API,
 
 8. Gradually widen access:
    - Enable more models and user groups
+
+> For detailed canary deployment procedure with per-step rollback, see the "Canary Deployment Procedure" section below.
+
+## Canary Deployment Procedure
+
+For production deployments, use a canary approach: run a parallel Docker Compose environment on different ports, verify it, then cut over. This section covers the full-stack canary process. For single-service upgrades, see the simpler in-place procedure below.
+
+### Prerequisites
+
+- Current production stack running and healthy (`starapihub health` exits 0)
+- Desired state YAML validated (`starapihub validate` exits 0)
+- No blocking drift (`starapihub diff` exits 0)
+- Database backup taken within the last hour
+
+### Step 1: Pre-flight Checks
+
+```bash
+# Validate desired state
+starapihub validate
+
+# Check current drift
+starapihub diff
+
+# Record current image versions
+docker inspect cp-new-api --format '{{.Config.Image}}' > /tmp/rollout-previous-versions.txt
+docker inspect cp-bifrost --format '{{.Config.Image}}' >> /tmp/rollout-previous-versions.txt
+docker inspect cp-clewdr-1 --format '{{.Config.Image}}' >> /tmp/rollout-previous-versions.txt
+
+# Backup PostgreSQL
+docker exec cp-postgres pg_dump -U newapi newapi > backup-$(date +%Y%m%d-%H%M).sql
+```
+
+**Rollback:** No changes made yet. If pre-flight fails, fix issues before proceeding.
+
+### Step 2: Prepare Canary Environment
+
+```bash
+# Create canary env files with alternate ports
+cp deploy/env/common.env deploy/env/canary.env
+
+# Edit canary.env to set:
+# - NGINX_HTTP_PORT=8080 (instead of 80)
+# - NGINX_HTTPS_PORT=8443 (instead of 443)
+# - COMPOSE_PROJECT_NAME=starapihub-canary
+# - Update image versions to new target versions
+# - Keep same database credentials (canary uses same DB or separate test DB)
+
+# For isolated canary (recommended): use a separate database
+# POSTGRES_PORT=5433
+# DATABASE_URL=postgresql://newapi:password@postgres-canary:5432/newapi
+```
+
+**Rollback:** Delete canary env files: `rm deploy/env/canary.env`
+
+### Step 3: Deploy Canary Stack
+
+```bash
+cd control-plane/deploy
+
+# Bring up canary stack on alternate ports
+COMPOSE_PROJECT_NAME=starapihub-canary \
+  docker-compose --env-file env/canary.env up -d
+
+# Wait for all containers to become healthy
+COMPOSE_PROJECT_NAME=starapihub-canary \
+  docker-compose --env-file env/canary.env ps
+
+# Should show all services as "Up (healthy)" within 60 seconds
+```
+
+**Rollback:** Tear down canary: `COMPOSE_PROJECT_NAME=starapihub-canary docker-compose --env-file env/canary.env down -v`
+
+### Step 4: Verify Canary
+
+```bash
+# Point CLI at canary endpoints
+export NEWAPI_URL=http://localhost:8080
+export BIFROST_URL=http://localhost:8080/bifrost
+export CLEWDR_URLS=http://localhost:8484
+
+# Run health checks against canary
+starapihub health
+
+# Run sync against canary (applies desired state)
+starapihub sync
+
+# Verify no drift
+starapihub diff
+
+# Run smoke tests against canary URL
+SMOKE_BASE_URL=https://localhost:8443 bash scripts/smoke/run-all.sh
+
+# Check cookie status
+starapihub cookie-status
+```
+
+**Rollback:** Tear down canary: `COMPOSE_PROJECT_NAME=starapihub-canary docker-compose --env-file env/canary.env down -v`
+
+### Step 5: Cut Over
+
+```bash
+# Update production env with new image versions
+# Edit deploy/env/common.env with the canary-validated versions
+
+# Stop old production stack
+cd control-plane/deploy
+docker-compose --env-file env/common.env down
+
+# Start new production stack
+docker-compose --env-file env/common.env up -d
+
+# Wait for healthy
+sleep 30
+docker-compose --env-file env/common.env ps
+
+# Point CLI back at production
+export NEWAPI_URL=http://localhost  # (production ports)
+export BIFROST_URL=http://localhost/bifrost
+
+# Run health and sync
+starapihub health
+starapihub sync
+```
+
+**Rollback:** Revert image versions in common.env to values from `/tmp/rollout-previous-versions.txt`, then `docker-compose --env-file env/common.env up -d`. If DB migration occurred, restore from backup: `docker exec -i cp-postgres psql -U newapi newapi < backup-YYYYMMDD-HHMM.sql`
+
+### Step 6: Cleanup and Soak
+
+```bash
+# Tear down canary stack
+COMPOSE_PROJECT_NAME=starapihub-canary \
+  docker-compose --env-file env/canary.env down -v
+
+# Remove canary env files
+rm deploy/env/canary.env
+
+# Monitor for 24 hours (soak period):
+# - Watch health: starapihub health
+# - Watch drift: starapihub diff
+# - Watch cookies: starapihub cookie-status
+# - Check audit log: tail -5 ~/.starapihub/audit.log | jq .
+# - Review error logs: docker logs cp-new-api --since 1h | grep -i error
+```
+
+**Rollback during soak:** If issues appear within the soak period, revert using Step 5 rollback procedure.
+
+### Single-Service In-Place Upgrade
+
+For upgrading a single service (e.g., just Bifrost) without a full canary:
+
+```bash
+# 1. Pre-flight
+starapihub health
+docker inspect cp-bifrost --format '{{.Config.Image}}'  # Record current version
+
+# 2. Backup
+docker cp cp-bifrost:/app/data ./bifrost-backup-$(date +%Y%m%d)
+
+# 3. Update version in common.env and recreate
+cd control-plane/deploy
+docker-compose --env-file env/common.env pull bifrost
+docker-compose --env-file env/common.env up -d bifrost
+
+# 4. Verify
+starapihub health
+starapihub diff
+bash scripts/smoke/run-all.sh
+
+# 5. Rollback (if needed): revert version in common.env, pull, recreate
+```
+
+See `docs/upgrade-strategy.md` for per-service upgrade details and watch-for notes. For monitoring setup to observe the canary and soak periods, see `docs/monitoring.md`.
+
+## Commercial Appliance Overlay
+
+If you are shipping the commercial-appliance variant, add these gates before Phase 4 is considered complete:
+
+- [ ] One-click bootstrap flow succeeds from a fresh environment
+- [ ] Drift detection runs clean against the desired-state registries
+- [ ] Request correlation works according to `docs/observability.md`
+- [ ] `docs/version-matrix.md` is updated with validated upstream versions
+- [ ] Any upstream patches are documented and approved through `docs/patch-audit-workflow.md`
    - Monitor each expansion for 24 hours before the next
 
 ### Exit Criteria
