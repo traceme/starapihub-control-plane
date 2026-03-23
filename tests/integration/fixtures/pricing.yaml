@@ -1,0 +1,4 @@
+pricing:
+  gpt-4o-mini:
+    model_ratio: 0.075
+    model_completion_ratio: 0.3

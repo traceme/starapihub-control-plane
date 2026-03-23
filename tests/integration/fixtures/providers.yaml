@@ -1,0 +1,12 @@
+providers:
+  test-openai:
+    id: test-openai
+    name: Test OpenAI Provider
+    base_provider_type: openai
+    network_config:
+      base_url: "https://api.openai.com/v1"
+    keys:
+      - id: test-key-1
+        value_env: OPENAI_API_KEY
+        models:
+          - gpt-4o-mini
