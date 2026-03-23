@@ -1,0 +1,32 @@
+=== Patch 001 End-to-End Evidence ===
+Date: 2026-03-23T15:17:43Z
+
+--- PATCH-01: Caller-supplied X-Request-ID preservation ---
+Request: curl -sI -H 'X-Request-ID: e2e-proof-001' http://127.0.0.1:3000/api/status
+
+Response headers:
+HTTP/1.1 404 Not Found
+Cache-Control: max-age=604800
+Cache-Version: b688f2fb5be447c25e5aa3bd063087a83db32a288bf6a4f35f2d8db310e40b14
+Content-Type: application/json; charset=utf-8
+X-New-Api-Version: -patched
+X-Oneapi-Request-Id: e2e-proof-001
+Date: Mon, 23 Mar 2026 15:17:43 GMT
+Content-Length: 106
+
+
+--- PATCH-02: Auto-generated ID (backward compatibility) ---
+Request: curl -sI http://127.0.0.1:3000/api/status
+
+Response headers:
+HTTP/1.1 404 Not Found
+Cache-Control: max-age=604800
+Cache-Version: b688f2fb5be447c25e5aa3bd063087a83db32a288bf6a4f35f2d8db310e40b14
+Content-Type: application/json; charset=utf-8
+X-New-Api-Version: -patched
+X-Oneapi-Request-Id: 20260323151743891033010uRmQb7Fo
+Date: Mon, 23 Mar 2026 15:17:43 GMT
+Content-Length: 106
+
+
+=== End Evidence ===

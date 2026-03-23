@@ -383,6 +383,7 @@ if [ "$MODE" != "appliance" ]; then
 elif ! live_stack_up; then
   record_skip "Patch 001" "live stack not reachable"
 else
+  # PATCH-01: Caller-supplied X-Request-ID is preserved
   TEST_RID="patch001-${TIMESTAMP}"
   HEADERS=$(curl -sI -H "X-Request-ID: $TEST_RID" "$NEWAPI_URL/api/status" 2>&1 || true)
   echo "$HEADERS" > "$ARTIFACT_DIR/patch001-headers.txt"
@@ -390,6 +391,16 @@ else
     record_pass "Patch 001" "patch001-headers.txt"
   else
     record_fail "Patch 001" "patch001-headers.txt" "X-Request-ID not propagated"
+  fi
+
+  # PATCH-02: Backward compat — auto-generated ID when no X-Request-ID sent
+  HEADERS_BC=$(curl -sI "$NEWAPI_URL/api/status" 2>&1 || true)
+  echo "$HEADERS_BC" > "$ARTIFACT_DIR/patch001-backward-compat-headers.txt"
+  BC_ID=$(echo "$HEADERS_BC" | grep -i "X-Oneapi-Request-Id" | tr -d '\r' | awk '{print $2}')
+  if [ -n "$BC_ID" ]; then
+    record_pass "Patch 001 backward compat" "patch001-backward-compat-headers.txt"
+  else
+    record_fail "Patch 001 backward compat" "patch001-backward-compat-headers.txt" "no auto-generated X-Oneapi-Request-Id"
   fi
 fi
 
