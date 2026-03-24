@@ -16,6 +16,78 @@ The setup script generates `.env` files with random passwords, starts the stack,
 - At least 4 GB RAM and 2 CPU cores for the full stack
 - For production: a domain name with TLS certificates (see nginx config)
 
+## TLS / HTTPS Setup
+
+The appliance serves all traffic over HTTPS by default. The nginx configuration includes TLS 1.2/1.3, strong cipher suites, security headers, and automatic HTTP-to-HTTPS redirect.
+
+### Quick Start (Self-Signed Certificate)
+
+For local development, staging, or testing:
+
+```bash
+# Generate a self-signed certificate for localhost
+bash scripts/gen-certs.sh
+
+# Or specify a custom domain
+bash scripts/gen-certs.sh --domain myapp.example.com
+
+# Regenerate (overwrites existing certs)
+bash scripts/gen-certs.sh --domain myapp.example.com --force
+```
+
+Certificates are written to `deploy/certs/server.crt` and `deploy/certs/server.key`.
+
+### Production (CA-Signed Certificate)
+
+For production deployments with a CA-signed certificate:
+
+```bash
+mkdir -p certs
+cp /path/to/fullchain.pem certs/server.crt
+cp /path/to/privkey.pem   certs/server.key
+chmod 600 certs/server.key
+```
+
+### Update Server Name
+
+Edit `config/nginx/nginx.conf` and replace `api.example.com` with your actual domain. This value appears twice (HTTPS server block and HTTP redirect block).
+
+### Verify TLS
+
+After starting the stack:
+
+```bash
+# HTTPS health check (use -k to accept self-signed certs)
+curl -k https://localhost/health
+
+# Verify HTTP-to-HTTPS redirect
+curl -I http://localhost/
+# Expected: HTTP/1.1 301 Moved Permanently, Location: https://localhost/
+
+# Check certificate details
+openssl s_client -connect localhost:443 -servername localhost </dev/null 2>/dev/null | openssl x509 -noout -subject -dates
+```
+
+### Local Development (HTTP-Only)
+
+The `docker-compose.override.yml` file automatically switches nginx to HTTP-only mode for local development. To use HTTPS locally, rename or remove the override file:
+
+```bash
+mv docker-compose.override.yml docker-compose.override.yml.bak
+bash ../scripts/gen-certs.sh
+docker compose --env-file env/common.env up -d
+```
+
+### Certificate Directory
+
+The `certs/` directory is mounted read-only into the nginx container. Certificate files (`*.crt`, `*.key`, `*.pem`) are excluded from git via `.gitignore`. Only the `.gitkeep` file is tracked to preserve the directory structure.
+
+To use a custom certificate directory, set the `TLS_CERT_DIR` environment variable:
+
+```bash
+TLS_CERT_DIR=/etc/letsencrypt/live/myapp docker compose --env-file env/common.env up -d
+```
+
 ## Architecture Overview
 
 ```
