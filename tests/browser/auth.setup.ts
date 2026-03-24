@@ -15,13 +15,17 @@ export function injectDashboardToken(page: Page): void {
 /**
  * Inject New-API admin user object into localStorage before page load.
  * New-API checks localStorage('user') for auth; AdminRoute requires role >= 10.
+ * The user object MUST include a valid 'token' field — without it, API calls
+ * return 401 and the app redirects to /login?expired=true.
  */
 export function injectNewApiToken(page: Page): void {
+  const token = process.env.ADMIN_TOKEN || '';
   const userJson = process.env.ADMIN_USER_JSON || JSON.stringify({
     username: 'admin',
     role: 100,
     status: 1,
     id: 1,
+    token: token,
   });
   page.addInitScript((u: string) => {
     window.localStorage.setItem('user', u);
