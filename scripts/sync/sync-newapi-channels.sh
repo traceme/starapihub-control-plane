@@ -45,11 +45,13 @@ warn()  { printf "${YELLOW}  [WARN]${RESET} %s\n" "$1"; }
 NEWAPI_URL="${NEWAPI_URL:?Set NEWAPI_URL (e.g., http://localhost:3000)}"
 ADMIN_TOKEN="${ADMIN_TOKEN:?Set ADMIN_TOKEN (obtain from New-API admin UI -> personal settings)}"
 BIFROST_URL="${BIFROST_URL:-http://bifrost:8080}"
+CHANNEL_KEY="${CHANNEL_KEY:-}"
 DRY_RUN="${DRY_RUN:-false}"
 
 echo "=== Sync New-API Channels ==="
 info "New-API:     $NEWAPI_URL"
 info "Bifrost URL: $BIFROST_URL (used as channel base_url)"
+info "Channel key: ${CHANNEL_KEY:+(set)}"
 info "Dry run:     $DRY_RUN"
 echo ""
 
@@ -90,7 +92,7 @@ create_channel() {
     "name": "$name",
     "type": 1,
     "base_url": "$BIFROST_URL",
-    "key": "",
+    "key": "$CHANNEL_KEY",
     "models": "$models",
     "model_mapping": "$mapping_json",
     "priority": $priority,
@@ -143,9 +145,10 @@ info "--- Creating channels ---"
 echo ""
 
 # Premium channel: official providers only
+# Model mapping uses provider/model format required by Bifrost (e.g., clewdr-1/claude-sonnet-4-20250514)
 create_channel "bifrost-premium" \
     "claude-sonnet,claude-opus,claude-haiku,gpt-4o,gpt-4o-mini" \
-    "{\"claude-sonnet\":\"claude-sonnet-4-20250514\",\"claude-opus\":\"claude-opus-4-20250514\",\"claude-haiku\":\"claude-haiku-4-5-20251001\",\"gpt-4o\":\"gpt-4o\",\"gpt-4o-mini\":\"gpt-4o-mini\"}" \
+    "{\"claude-sonnet\":\"clewdr-1/claude-sonnet-4-20250514\",\"claude-opus\":\"clewdr-1/claude-opus-4-20250514\",\"claude-haiku\":\"claude-haiku-4-5-20251001\",\"gpt-4o\":\"gpt-4o\",\"gpt-4o-mini\":\"gpt-4o-mini\"}" \
     0
 
 echo ""
@@ -153,7 +156,7 @@ echo ""
 # Standard channel: official preferred, unofficial fallback
 create_channel "bifrost-standard" \
     "cheap-chat,fast-chat" \
-    "{\"cheap-chat\":\"claude-sonnet-4-20250514\",\"fast-chat\":\"claude-haiku-4-5-20251001\"}" \
+    "{\"cheap-chat\":\"clewdr-1/claude-sonnet-4-20250514\",\"fast-chat\":\"claude-haiku-4-5-20251001\"}" \
     5
 
 echo ""
@@ -161,7 +164,7 @@ echo ""
 # Risky channel: ClewdR primary
 create_channel "bifrost-risky" \
     "lab-claude,lab-claude-opus" \
-    "{\"lab-claude\":\"claude-sonnet-4-20250514\",\"lab-claude-opus\":\"claude-opus-4-20250514\"}" \
+    "{\"lab-claude\":\"clewdr-1/claude-sonnet-4-20250514\",\"lab-claude-opus\":\"clewdr-1/claude-opus-4-20250514\"}" \
     10
 
 # ── Summary ──────────────────────────────────────────────

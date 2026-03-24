@@ -51,6 +51,7 @@ NEWAPI_URL=http://localhost:3000 ADMIN_TOKEN=<token> ./sync-newapi-channels.sh
 
 **Optional:**
 - `BIFROST_URL` -- Internal Bifrost URL used as the channel base_url (default: `http://bifrost:8080`)
+- `CHANNEL_KEY` -- Bearer token New-API sends to Bifrost (set to ClewdR admin password for direct key passthrough; default: empty)
 - `DRY_RUN` -- Set to `true` to preview without creating (default: `false`)
 
 ## Manual Steps (Automatable in Phase 3)
