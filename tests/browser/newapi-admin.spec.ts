@@ -35,7 +35,9 @@ test.describe('New-API Admin Pages', () => {
 
   test.beforeEach(async ({ page }) => {
     injectNewApiToken(page);
-    consoleErrors = collectConsoleErrors(page);
+    // filterAuth=true: New-API API calls return 401 with synthetic token,
+    // but the SPA pages render correctly. Only catch unexpected errors.
+    consoleErrors = collectConsoleErrors(page, true);
   });
 
   test('[New-API] Channels page renders', async ({ page }) => {

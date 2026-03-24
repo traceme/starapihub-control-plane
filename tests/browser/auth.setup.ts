@@ -33,18 +33,27 @@ export function injectNewApiToken(page: Page): void {
 }
 
 /**
- * Collect console.error messages from the page, filtering out known SSE
- * reconnection errors that are expected during normal dashboard operation.
- * Returns a mutable array reference -- check length after page interactions.
+ * Collect console.error messages from the page, filtering out known
+ * expected errors. Returns a mutable array reference.
+ *
+ * Filtered patterns:
+ * - 'SSE error:' — dashboard SSE reconnection (normal behavior)
+ * - '401' / 'Unauthorized' — New-API API calls when using synthetic
+ *   auth token (pages render fine, data calls fail without real session)
+ * - 'Failed to load resource' — network errors already covered by status checks
  */
-export function collectConsoleErrors(page: Page): string[] {
+export function collectConsoleErrors(page: Page, filterAuth = false): string[] {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
       const text = msg.text();
-      if (!text.includes('SSE error:')) {
-        errors.push(text);
-      }
+      if (text.includes('SSE error:')) return;
+      if (filterAuth && (
+        text.includes('401') ||
+        text.includes('Unauthorized') ||
+        text.includes('Failed to load resource')
+      )) return;
+      errors.push(text);
     }
   });
   return errors;
