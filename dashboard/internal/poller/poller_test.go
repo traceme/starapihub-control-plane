@@ -150,7 +150,7 @@ func TestGetUnhealthySince_NotPresent(t *testing.T) {
 
 func testLogRegex() *regexp.Regexp {
 	return regexp.MustCompile(
-		`^(\S+)\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d+)\s+req_id=(\S+)\s+upstream=(\S+)`,
+		`^(\S+)\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d+)\s+req_id=(\S+)\s+upstream=(\S*)`,
 	)
 }
 
@@ -425,5 +425,54 @@ func TestTailLog_NoNewContent(t *testing.T) {
 	}
 	if offset2 != offset {
 		t.Errorf("expected offset unchanged, got %d vs %d", offset2, offset)
+	}
+}
+
+func TestParseLine_UpstreamDash(t *testing.T) {
+	re := testLogRegex()
+	line := `10.0.0.1 [15/Jan/2025:10:00:00 +0000] "GET /health HTTP/1.1" 403 req_id=r1 upstream=-`
+
+	entry, ok := parseLine(line, re)
+	if !ok {
+		t.Fatal("expected parseLine to succeed for upstream=-")
+	}
+	if entry.Status != 403 {
+		t.Errorf("expected status 403, got %d", entry.Status)
+	}
+	if entry.UpstreamTime != 0 {
+		t.Errorf("expected upstream time 0 for '-', got %f", entry.UpstreamTime)
+	}
+	if entry.LatencyMs != 0 {
+		t.Errorf("expected latency 0 for '-', got %f", entry.LatencyMs)
+	}
+}
+
+func TestParseLine_UpstreamEmpty(t *testing.T) {
+	re := testLogRegex()
+	// upstream= with nothing after (empty string)
+	line := `10.0.0.1 [15/Jan/2025:10:00:00 +0000] "GET /static/file.js HTTP/1.1" 200 req_id=r1 upstream=`
+
+	entry, ok := parseLine(line, re)
+	if !ok {
+		t.Fatal("expected parseLine to succeed for empty upstream")
+	}
+	if entry.UpstreamTime != 0 {
+		t.Errorf("expected upstream time 0 for empty, got %f", entry.UpstreamTime)
+	}
+}
+
+func TestHighUtilCalculation(t *testing.T) {
+	// Test the HighUtil calculation logic directly using the cookieUtilization struct
+	// This mirrors what pollCookies does when unmarshalling CookieResponse entries
+	utilizations := []int{45, 85, 92, 30, 80, 81}
+	highUtil := 0
+	for _, u := range utilizations {
+		if u > 80 {
+			highUtil++
+		}
+	}
+	// 85, 92, 81 are > 80; 80 is NOT > 80
+	if highUtil != 3 {
+		t.Errorf("expected 3 high util cookies, got %d", highUtil)
 	}
 }

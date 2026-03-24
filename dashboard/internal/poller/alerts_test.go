@@ -2,6 +2,7 @@ package poller
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -197,5 +198,64 @@ func TestCheckAlerts_UnhealthyServiceTooRecent(t *testing.T) {
 	alerts, _ := st.ListAlerts(10)
 	if len(alerts) != 0 {
 		t.Errorf("expected 0 alerts for recently unhealthy service, got %d", len(alerts))
+	}
+}
+
+func TestFireAlert_UpdatesState(t *testing.T) {
+	st := newTestStoreForPoller(t)
+	state := NewSystemState()
+
+	cfg := Config{
+		Store: st,
+		State: state,
+	}
+
+	fireAlert(cfg, store.Alert{
+		Type:      "WARNING",
+		Service:   "test-svc",
+		Message:   "state update test",
+		Timestamp: time.Now(),
+	})
+
+	snap := state.GetSnapshot()
+	if len(snap.Alerts) != 1 {
+		t.Fatalf("expected 1 alert in state, got %d", len(snap.Alerts))
+	}
+	if snap.Alerts[0].Type != "WARNING" {
+		t.Errorf("expected WARNING, got %s", snap.Alerts[0].Type)
+	}
+	if snap.Alerts[0].Service != "test-svc" {
+		t.Errorf("expected test-svc, got %s", snap.Alerts[0].Service)
+	}
+	if snap.Alerts[0].Message != "state update test" {
+		t.Errorf("expected 'state update test', got %s", snap.Alerts[0].Message)
+	}
+	if snap.Alerts[0].ID == 0 {
+		t.Error("expected alert ID to be set from store")
+	}
+}
+
+func TestAppendAlert_Cap(t *testing.T) {
+	state := NewSystemState()
+
+	for i := 0; i < 110; i++ {
+		state.AppendAlert(store.Alert{
+			ID:      int64(i + 1),
+			Type:    "INFO",
+			Service: "svc",
+			Message: fmt.Sprintf("alert %d", i+1),
+		})
+	}
+
+	snap := state.GetSnapshot()
+	if len(snap.Alerts) != 100 {
+		t.Fatalf("expected 100 alerts (capped), got %d", len(snap.Alerts))
+	}
+	// First alert should be #11 (first 10 dropped)
+	if snap.Alerts[0].ID != 11 {
+		t.Errorf("expected first alert ID 11, got %d", snap.Alerts[0].ID)
+	}
+	if snap.Alerts[99].ID != 110 {
+		t.Errorf("expected last alert ID 110, got %d", snap.Alerts[99].ID)
 	}
 }
