@@ -23,6 +23,10 @@ test.describe('Dashboard Pages', () => {
     await assertNoErrorBoundary(page);
     // Target the page heading specifically to avoid matching nav links
     await expect(page.getByRole('heading', { name: /Cookie/ })).toBeVisible({ timeout: 10000 });
+    // CI-06: Assert at least one ClewdR instance card is visible (real data, not just heading)
+    await expect(
+      page.locator('[class*="instanceName"]').first()
+    ).toBeVisible({ timeout: 20000 });
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -39,6 +43,10 @@ test.describe('Dashboard Pages', () => {
     await page.waitForLoadState('domcontentloaded');
     await assertNoErrorBoundary(page);
     await expect(page.getByRole('heading', { name: /Log/ })).toBeVisible({ timeout: 10000 });
+    // CI-07: Assert at least one real log entry exists (from smoke inference in global setup)
+    const logTable = page.locator('table');
+    await expect(logTable).toBeVisible({ timeout: 15000 });
+    await expect(logTable.locator('tbody tr').first()).toBeVisible({ timeout: 15000 });
     expect(consoleErrors).toHaveLength(0);
   });
 
