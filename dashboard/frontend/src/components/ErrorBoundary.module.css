@@ -1,0 +1,48 @@
+.errorContainer {
+  text-align: center;
+  padding: 48px 24px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.errorHeading {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.errorMessage {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.errorDetail {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--red);
+  text-align: left;
+  word-break: break-word;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+
+.retryButton {
+  background: var(--sidebar-bg, #1a1a2e);
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.retryButton:hover {
+  opacity: 0.85;
+}
