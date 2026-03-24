@@ -10,6 +10,7 @@ import LogViewer from './components/LogViewer';
 import SetupWizard from './components/SetupWizard';
 import OpsPanel from './components/OpsPanel';
 import AlertBanner from './components/AlertBanner';
+import ErrorBoundary from './components/ErrorBoundary';
 import styles from './App.module.css';
 
 const NAV_ITEMS = [
@@ -153,12 +154,12 @@ export default function App() {
 
         <main className={`${styles.content} ${isStale ? styles.contentStale : ''}`} role="main" aria-label="Dashboard content">
           <Routes>
-            <Route path="/" element={<HealthDashboard state={state} />} />
-            <Route path="/cookies" element={<CookiePanel cookies={state.cookies} />} />
-            <Route path="/models" element={<ModelEditor />} />
-            <Route path="/logs" element={<LogViewer />} />
-            <Route path="/ops" element={<OpsPanel />} />
-            <Route path="/setup" element={<SetupWizard />} />
+            <Route path="/" element={<ErrorBoundary fallbackLabel="Home dashboard"><HealthDashboard state={state} /></ErrorBoundary>} />
+            <Route path="/cookies" element={<ErrorBoundary fallbackLabel="Cookies page"><CookiePanel cookies={state.cookies} /></ErrorBoundary>} />
+            <Route path="/models" element={<ErrorBoundary fallbackLabel="Models page"><ModelEditor /></ErrorBoundary>} />
+            <Route path="/logs" element={<ErrorBoundary fallbackLabel="Logs page"><LogViewer /></ErrorBoundary>} />
+            <Route path="/ops" element={<ErrorBoundary fallbackLabel="Ops page"><OpsPanel /></ErrorBoundary>} />
+            <Route path="/setup" element={<ErrorBoundary fallbackLabel="Setup wizard"><SetupWizard /></ErrorBoundary>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
