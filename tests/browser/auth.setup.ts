@@ -33,13 +33,82 @@ export function injectNewApiToken(page: Page): void {
 }
 
 /**
+ * Programmatic login to New-API: POST /api/user/login, capture session cookie,
+ * inject into browser context + localStorage user object.
+ * Returns true if login succeeded, false if credentials missing or login failed.
+ */
+export async function loginNewApi(page: Page): Promise<boolean> {
+  const newApiUrl = process.env.NEWAPI_URL || 'http://localhost:3000';
+  const username = process.env.ADMIN_USERNAME;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!username || !password) {
+    return false;
+  }
+
+  const resp = await fetch(`${newApiUrl}/api/user/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!resp.ok) return false;
+
+  const body = await resp.json();
+  if (!body.success) return false;
+
+  // Check for 2FA requirement
+  if (body.data?.require_2fa) {
+    throw new Error(
+      'CI-08: New-API admin account has 2FA enabled. ' +
+      'Disable 2FA for the CI admin user to use programmatic login.'
+    );
+  }
+
+  // Parse Set-Cookie header and inject into browser context
+  const setCookieHeader = resp.headers.get('set-cookie') || '';
+  if (setCookieHeader) {
+    const url = new URL(newApiUrl);
+    const cookies: Array<{name: string; value: string; domain: string; path: string}> = [];
+    // Set-Cookie may have multiple values separated by comma-space for date parts,
+    // so split carefully on comma followed by space and a cookie name pattern
+    for (const part of setCookieHeader.split(/,\s*(?=[A-Za-z_]+=)/)) {
+      const [nameValue] = part.split(';');
+      if (nameValue && nameValue.includes('=')) {
+        const eqIdx = nameValue.indexOf('=');
+        cookies.push({
+          name: nameValue.substring(0, eqIdx).trim(),
+          value: nameValue.substring(eqIdx + 1).trim(),
+          domain: url.hostname,
+          path: '/',
+        });
+      }
+    }
+    if (cookies.length > 0) {
+      await page.context().addCookies(cookies);
+    }
+  }
+
+  // Inject user data into localStorage BEFORE page loads
+  // New-API frontend reads localStorage('user') for auth state and New-API-User header
+  const userData = body.data;
+  await page.addInitScript((u: string) => {
+    window.localStorage.setItem('user', u);
+  }, JSON.stringify(userData));
+
+  return true;
+}
+
+/**
  * Collect console.error messages from the page, filtering out known
  * expected errors. Returns a mutable array reference.
  *
  * Filtered patterns:
  * - 'SSE error:' — dashboard SSE reconnection (normal behavior)
  * - '401' / 'Unauthorized' — New-API API calls when using synthetic
- *   auth token (pages render fine, data calls fail without real session)
+ *   auth token (pages render fine, data calls fail without real session).
+ *   When using real auth via loginNewApi(), set filterAuth=false (the default)
+ *   so 401 errors are caught as real failures.
  * - 'Failed to load resource' — network errors already covered by status checks
  */
 export function collectConsoleErrors(page: Page, filterAuth = false): string[] {

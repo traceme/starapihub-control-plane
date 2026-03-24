@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { injectNewApiToken, collectConsoleErrors } from './auth.setup';
+import { loginNewApi, collectConsoleErrors } from './auth.setup';
 
 const NEWAPI_URL = process.env.NEWAPI_URL || 'http://localhost:3000';
 
@@ -34,10 +34,11 @@ test.describe('New-API Admin Pages', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    injectNewApiToken(page);
-    // filterAuth=true: New-API API calls return 401 with synthetic token,
-    // but the SPA pages render correctly. Only catch unexpected errors.
-    consoleErrors = collectConsoleErrors(page, true);
+    const loggedIn = await loginNewApi(page);
+    if (!loggedIn) {
+      test.skip(true, 'ADMIN_USERNAME/ADMIN_PASSWORD not set or login failed -- skipping New-API tests');
+    }
+    consoleErrors = collectConsoleErrors(page);
   });
 
   test('[New-API] Channels page renders', async ({ page }) => {
@@ -48,8 +49,11 @@ test.describe('New-API Admin Pages', () => {
     }
     await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 5000 });
-    // Wait for React SPA to hydrate and render content
-    await expect(page.locator('body').first()).not.toHaveText('', { timeout: 15000 });
+    // CI-09: Assert at least one channel row visible
+    // Fallback if Semi classes are minified: page.locator('table[role="grid"] tbody tr')
+    await expect(
+      page.locator('.semi-table-tbody .semi-table-row').first()
+    ).toBeVisible({ timeout: 15000 });
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -61,7 +65,10 @@ test.describe('New-API Admin Pages', () => {
     }
     await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 5000 });
-    await expect(page.locator('body').first()).not.toHaveText('', { timeout: 15000 });
+    // CI-09: Assert at least one token row visible
+    await expect(
+      page.locator('.semi-table-tbody .semi-table-row').first()
+    ).toBeVisible({ timeout: 15000 });
     expect(consoleErrors).toHaveLength(0);
   });
 
@@ -73,7 +80,10 @@ test.describe('New-API Admin Pages', () => {
     }
     await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 5000 });
-    await expect(page.locator('body').first()).not.toHaveText('', { timeout: 15000 });
+    // CI-09: Assert at least one log entry row visible
+    await expect(
+      page.locator('.semi-table-tbody .semi-table-row').first()
+    ).toBeVisible({ timeout: 15000 });
     expect(consoleErrors).toHaveLength(0);
   });
 });
