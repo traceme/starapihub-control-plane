@@ -3,6 +3,7 @@ package poller
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math"
 	"os"
@@ -110,6 +111,17 @@ func (s *SystemState) SetCookies(instance string, cs CookieStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Cookies[instance] = cs
+	s.UpdatedAt = time.Now()
+}
+
+func (s *SystemState) AppendAlert(a store.Alert) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Alerts = append(s.Alerts, a)
+	const maxAlerts = 100
+	if len(s.Alerts) > maxAlerts {
+		s.Alerts = s.Alerts[len(s.Alerts)-maxAlerts:]
+	}
 	s.UpdatedAt = time.Now()
 }
 
@@ -278,6 +290,10 @@ func StartCookiePoller(ctx context.Context, cfg Config) {
 	}()
 }
 
+type cookieUtilization struct {
+	SessionUtilization int `json:"session_utilization"`
+}
+
 func pollCookies(cfg Config) {
 	for i, url := range cfg.ClewdRURLs {
 		token := ""
@@ -292,11 +308,22 @@ func pollCookies(cfg Config) {
 			continue
 		}
 
+		highUtil := 0
+		for _, raw := range cr.Valid {
+			var cu cookieUtilization
+			if err := json.Unmarshal(raw, &cu); err == nil {
+				if cu.SessionUtilization > 80 {
+					highUtil++
+				}
+			}
+		}
+
 		cs := CookieStatus{
 			Valid:     len(cr.Valid),
 			Exhausted: len(cr.Exhausted),
 			Invalid:   len(cr.Invalid),
 			Total:     len(cr.Valid) + len(cr.Exhausted) + len(cr.Invalid),
+			HighUtil:  highUtil,
 			LastCheck: time.Now(),
 		}
 		cfg.State.SetCookies(name, cs)
@@ -313,7 +340,7 @@ func StartLogTailer(ctx context.Context, cfg Config) {
 		// nginx log regex:
 		// $remote_addr [$time_local] "$request" $status req_id=$req_id upstream=$upstream_response_time
 		logRegex := regexp.MustCompile(
-			`^(\S+)\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d+)\s+req_id=(\S+)\s+upstream=(\S+)`,
+			`^(\S+)\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d+)\s+req_id=(\S+)\s+upstream=(\S*)`,
 		)
 
 		ticker := time.NewTicker(5 * time.Second)

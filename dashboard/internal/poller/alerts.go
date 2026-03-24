@@ -94,6 +94,9 @@ func fireAlert(cfg Config, alert store.Alert) {
 
 	slog.Warn("alert fired", "id", id, "type", alert.Type, "service", alert.Service, "message", alert.Message)
 
+	alert.ID = id
+	cfg.State.AppendAlert(alert)
+
 	// Send webhook if configured
 	if cfg.AlertWebhookURL != "" {
 		go sendWebhook(cfg.AlertWebhookURL, alert)
