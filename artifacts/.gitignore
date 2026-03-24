@@ -1,0 +1,4 @@
+*.xml
+*.json
+!.gitkeep
+!.gitignore
