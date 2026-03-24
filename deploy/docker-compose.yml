@@ -31,6 +31,10 @@ services:
     image: nginx:1.27-alpine
     container_name: cp-nginx
     restart: unless-stopped
+    # Remove default stdout/stderr symlinks so nginx writes real log files
+    # that the dashboard container can tail via the shared nginx-logs volume.
+    entrypoint: ["/bin/sh", "-c", "rm -f /var/log/nginx/access.log /var/log/nginx/error.log && exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    command: []
     ports:
       - "${PUBLIC_HTTPS_PORT:-443}:443"
       - "${PUBLIC_HTTP_PORT:-80}:80"

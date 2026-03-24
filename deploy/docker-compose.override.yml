@@ -4,6 +4,10 @@
 
 services:
   nginx:
+    # Remove default stdout/stderr symlinks so nginx writes real log files
+    # that the dashboard container can tail via the shared nginx-logs volume.
+    entrypoint: ["/bin/sh", "-c", "rm -f /var/log/nginx/access.log /var/log/nginx/error.log && exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    command: []
     volumes:
       - ../config/nginx/nginx.local-dev.conf:/etc/nginx/nginx.conf:ro
       - ../config/nginx/conf.d:/etc/nginx/conf.d:ro
