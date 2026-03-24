@@ -1,0 +1,8 @@
+# TLS certificates -- NEVER commit private keys
+certs/*.crt
+certs/*.key
+certs/*.pem
+certs/*.p12
+
+# Keep the directory itself via .gitkeep
+!certs/.gitkeep
