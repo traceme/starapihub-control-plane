@@ -38,12 +38,27 @@ export async function fetchLogs(params: {
   if (params.status) q.set('status', params.status);
   if (params.model) q.set('model', params.model);
   if (params.limit) q.set('limit', String(params.limit));
-  return request<LogEntry[]>(`/api/logs?${q.toString()}`);
+  const data = await request<{ count: number; entries: LogEntry[] | null }>(`/api/logs?${q.toString()}`);
+  return data.entries || [];
 }
 
 // Models
 export async function fetchModels(): Promise<LogicalModel[]> {
-  return request<LogicalModel[]>('/api/models');
+  const data = await request<unknown>('/api/models');
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid /api/models response: expected an array of logical models');
+  }
+  return data.map((model) => {
+    if (!model || typeof model !== 'object') {
+      throw new Error('Invalid /api/models response: expected model objects');
+    }
+
+    const typedModel = model as Partial<LogicalModel> & { providers?: unknown };
+    return {
+      ...typedModel,
+      providers: Array.isArray(typedModel.providers) ? typedModel.providers : [],
+    } as LogicalModel;
+  });
 }
 
 export async function createModel(model: Omit<LogicalModel, 'id'>): Promise<LogicalModel> {
