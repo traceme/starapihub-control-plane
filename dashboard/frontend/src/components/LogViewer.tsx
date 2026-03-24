@@ -51,7 +51,7 @@ export default function LogViewer() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Request Logs</h2>
+        <h2 className={styles.title}>Gateway Request Logs</h2>
         <div className={styles.filters}>
           <select
             className={styles.filterSelect}
@@ -75,12 +75,19 @@ export default function LogViewer() {
         </div>
       </div>
 
+      <p className={styles.infoLink}>
+        Looking for billing &amp; token usage?{' '}
+        <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer">
+          New-API Admin (port 3000) &rarr;
+        </a>
+      </p>
+
       {error && <div className={styles.error}>{error}</div>}
 
       {loading ? (
         <p className={styles.empty}>Loading logs...</p>
       ) : logs.length === 0 ? (
-        <p className={styles.empty}>No logs found matching filters.</p>
+        <p className={styles.empty}>No gateway request logs found. Logs appear after inference requests pass through the nginx gateway.</p>
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
