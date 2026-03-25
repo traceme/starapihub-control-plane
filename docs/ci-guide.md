@@ -132,3 +132,27 @@ All nightly steps fail the job — nothing is silently swallowed.
 - `releases/<version>/<timestamp>/` — full RC validation evidence
 - `release-binaries/starapihub-<version>-<os>-<arch>` — stamped CLI binary
 - `browser-results.xml` + `browser-results.json`
+
+## Evidence Surface — Where Things Live
+
+Not all release evidence lives in the same place. This table clarifies the source of truth for each artifact type.
+
+| Artifact | Storage Type | Location | Retention | Operator Access |
+|----------|-------------|----------|-----------|----------------|
+| CLI binary | **GitHub Release asset** | `gh release download v<version>` | Permanent | Direct download |
+| Pushed container images | **Container registry** | `docker pull <registry>/<ns>/<image>:<tag>` | Registry policy | `docker pull` |
+| `release-manifest.json` | **Workflow artifact** | Release workflow run → Artifacts tab | 90 days | `gh run download` |
+| Browser test results | **Workflow artifact** | CI/Release/Nightly run → Artifacts tab | 14–90 days | `gh run download` |
+| RC validation evidence | **Workflow artifact** | Release workflow run → Artifacts tab | 90 days | `gh run download` |
+| Nightly logs | **Workflow artifact** | Nightly workflow run → Artifacts tab | 14 days | `gh run download` |
+| Git tags | **Git** | `git tag -l "v*"` | Permanent | `git fetch --tags` |
+| GitHub Release page | **GitHub** | `gh release view v<version>` | Permanent | Browser or `gh` CLI |
+| Version matrix | **Git (checked in)** | `control-plane/docs/version-matrix.md` | Permanent | `git show` / file read |
+
+**Key distinction:** `release-manifest.json` is a workflow artifact (build evidence), not a GitHub Release asset (operator download). The manifest contains pushed image digests and validation results for pipeline review. The CLI binary is the only asset attached to the GitHub Release itself.
+
+## Related Docs
+
+- [Promotion Criteria](promotion-criteria.md) — when a release is promotable
+- [Rollback Runbook](rollback-runbook.md) — how to roll back safely
+- [Release Status](release-status.md) — current promoted/validated/failed versions
