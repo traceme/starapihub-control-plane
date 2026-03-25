@@ -18,9 +18,9 @@ async function globalSetup(config: FullConfig) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: process.env.SMOKE_MODEL || 'cheap-chat',
       messages: [{ role: 'user', content: 'ping' }],
-      max_tokens: 1,
+      max_tokens: 5,
     }),
   });
 

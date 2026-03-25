@@ -13,6 +13,7 @@
 #   API_KEY            — New-API bearer token for smoke inference (REQUIRED for CI-05)
 #   ADMIN_USERNAME     — New-API admin login user   (required for CI-08 real auth)
 #   ADMIN_PASSWORD     — New-API admin login pass   (required for CI-08 real auth)
+#   SMOKE_MODEL        — model name for smoke inference (default: cheap-chat)
 #
 # If API_KEY is unset, the global-setup smoke inference will fail fast.
 # If ADMIN_USERNAME / ADMIN_PASSWORD are unset, New-API admin tests are skipped.
@@ -45,6 +46,7 @@ export NEWAPI_URL="${NEWAPI_URL:-http://localhost:3000}"
 export API_KEY="${API_KEY:-}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+export SMOKE_MODEL="${SMOKE_MODEL:-cheap-chat}"
 
 # ── Color codes ───────────────────────────────────────────
 if [ -t 1 ]; then
