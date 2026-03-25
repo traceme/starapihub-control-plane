@@ -1,7 +1,10 @@
 import type { FullConfig } from '@playwright/test';
 
 async function globalSetup(config: FullConfig) {
-  const newApiUrl = process.env.NEWAPI_URL || 'http://localhost:3000';
+  // GATEWAY_URL routes through nginx so the request generates an nginx access
+  // log entry for CI-07. Falls back to NEWAPI_URL for backward compatibility,
+  // but CI-07 will only pass when the request hits the nginx ingress.
+  const gatewayUrl = process.env.GATEWAY_URL || process.env.NEWAPI_URL || 'http://localhost:3000';
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -11,7 +14,7 @@ async function globalSetup(config: FullConfig) {
     );
   }
 
-  const resp = await fetch(`${newApiUrl}/v1/chat/completions`, {
+  const resp = await fetch(`${gatewayUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -27,11 +30,12 @@ async function globalSetup(config: FullConfig) {
   if (!resp.ok && resp.status !== 402 && resp.status !== 429) {
     throw new Error(
       `CI-05: Smoke inference failed with status ${resp.status}. ` +
+      `URL: ${gatewayUrl}/v1/chat/completions\n` +
       `Response: ${await resp.text()}`
     );
   }
 
-  // Allow brief propagation time for logs to be written
+  // Allow brief propagation time for nginx log to be written and polled
   await new Promise(r => setTimeout(r, 2000));
 }
 

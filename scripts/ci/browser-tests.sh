@@ -9,7 +9,10 @@
 #
 #   DASHBOARD_URL      — dashboard base URL        (default: http://localhost:8090)
 #   DASHBOARD_TOKEN    — dashboard sessionStorage token (default: test-token)
-#   NEWAPI_URL         — New-API base URL           (default: http://localhost:3000)
+#   NEWAPI_URL         — New-API base URL for admin access (default: http://localhost:3000)
+#   GATEWAY_URL        — nginx ingress URL for smoke inference (default: NEWAPI_URL)
+#                        Set this to the nginx port (e.g., http://localhost:80) so the
+#                        smoke request generates an nginx access log entry for CI-07.
 #   API_KEY            — New-API bearer token for smoke inference (REQUIRED for CI-05)
 #   ADMIN_USERNAME     — New-API admin login user   (required for CI-08 real auth)
 #   ADMIN_PASSWORD     — New-API admin login pass   (required for CI-08 real auth)
@@ -17,11 +20,10 @@
 #
 # If API_KEY is unset, the global-setup smoke inference will fail fast.
 # If ADMIN_USERNAME / ADMIN_PASSWORD are unset, New-API admin tests are skipped.
+# If GATEWAY_URL is unset, smoke inference uses NEWAPI_URL (may bypass nginx → CI-07 fails).
 #
 # Usage:
-#   API_KEY=sk-xxx ADMIN_USERNAME=admin ADMIN_PASSWORD=secret ./browser-tests.sh
-#   DASHBOARD_URL=https://dash.example.com NEWAPI_URL=https://api.example.com \
-#     API_KEY=sk-xxx ADMIN_USERNAME=admin ADMIN_PASSWORD=secret ./browser-tests.sh
+#   GATEWAY_URL=http://localhost:80 API_KEY=sk-xxx ADMIN_USERNAME=admin ADMIN_PASSWORD=secret ./browser-tests.sh
 
 set -euo pipefail
 
@@ -43,6 +45,7 @@ fi
 export DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8090}"
 export DASHBOARD_TOKEN="${DASHBOARD_TOKEN:-test-token}"
 export NEWAPI_URL="${NEWAPI_URL:-http://localhost:3000}"
+export GATEWAY_URL="${GATEWAY_URL:-${NEWAPI_URL}}"
 export API_KEY="${API_KEY:-}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
@@ -66,6 +69,7 @@ printf "${BOLD}  Browser Regression Tests${RESET}\n"
 printf "${BOLD}========================================${RESET}\n"
 printf "  DASHBOARD_URL:    %s\n" "$DASHBOARD_URL"
 printf "  NEWAPI_URL:       %s\n" "$NEWAPI_URL"
+printf "  GATEWAY_URL:      %s\n" "$GATEWAY_URL"
 printf "  DASHBOARD_TOKEN:  %s\n" "$([ -n "$DASHBOARD_TOKEN" ] && echo 'set' || echo 'not set')"
 printf "  API_KEY:          %s\n" "$([ -n "$API_KEY" ] && echo 'set' || echo 'NOT SET — global setup will fail')"
 printf "  ADMIN_USERNAME:   %s\n" "$([ -n "$ADMIN_USERNAME" ] && echo 'set' || echo 'not set — New-API tests will skip')"
