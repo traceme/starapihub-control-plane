@@ -1,10 +1,13 @@
 package store
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -312,9 +315,9 @@ func TestGetLogByRequestID_NotFound(t *testing.T) {
 func TestHasRecentAlert(t *testing.T) {
 	s := newTestStore(t)
 
-	s.InsertAlert(Alert{Type: "WARN", Service: "svc", Message: "m", Timestamp: time.Now()})
+	s.InsertAlert(Alert{Type: "WARNING", Severity: "WARNING", Signal: "config-drift", Service: "svc", Message: "m", Timestamp: time.Now()})
 
-	has, err := s.HasRecentAlert("WARN", "svc", 1*time.Minute)
+	has, err := s.HasRecentAlert("WARNING", "svc", 1*time.Minute)
 	if err != nil {
 		t.Fatalf("HasRecentAlert: %v", err)
 	}
@@ -368,5 +371,173 @@ func TestNew_WALMode(t *testing.T) {
 	}
 	if mode != "wal" {
 		t.Errorf("expected WAL mode, got %q", mode)
+	}
+}
+
+// TestMigrate_LegacyV17Database creates a v1.7 alerts table (no severity/signal columns),
+// inserts a legacy row, then opens the store (which runs migrate) and proves:
+// 1. The migration succeeds without error
+// 2. The severity column was added and backfilled from type
+// 3. The signal column was added and left empty (no way to infer it)
+// 4. Legacy data is preserved
+func TestMigrate_LegacyV17Database(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy.db")
+
+	// Step 1: Create a v1.7-style database with the old schema (no severity/signal)
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	_, err = db.Exec(`CREATE TABLE alerts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		type TEXT NOT NULL,
+		service TEXT NOT NULL,
+		message TEXT NOT NULL,
+		timestamp DATETIME NOT NULL DEFAULT (datetime('now')),
+		acknowledged INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy alerts table: %v", err)
+	}
+	// Also create the log_entries table (v1.7 had it)
+	_, err = db.Exec(`CREATE TABLE log_entries (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME NOT NULL,
+		method TEXT NOT NULL,
+		path TEXT NOT NULL,
+		status INTEGER NOT NULL,
+		latency_ms REAL NOT NULL DEFAULT 0,
+		request_id TEXT NOT NULL DEFAULT '',
+		model TEXT NOT NULL DEFAULT '',
+		upstream_time REAL NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy log_entries table: %v", err)
+	}
+
+	// Insert a legacy alert (no severity/signal columns)
+	_, err = db.Exec(`INSERT INTO alerts (type, service, message, timestamp) VALUES (?, ?, ?, ?)`,
+		"CRITICAL", "new-api", "legacy alert", time.Now())
+	if err != nil {
+		t.Fatalf("insert legacy alert: %v", err)
+	}
+	db.Close()
+
+	// Step 2: Open with store.New — this runs migrate()
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New on legacy db: %v", err)
+	}
+	defer s.Close()
+
+	// Step 3: Verify migration results
+	alerts, err := s.ListAlerts(10)
+	if err != nil {
+		t.Fatalf("ListAlerts after migration: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 legacy alert, got %d", len(alerts))
+	}
+
+	a := alerts[0]
+	if a.Type != "CRITICAL" {
+		t.Errorf("expected type CRITICAL, got %s", a.Type)
+	}
+	if a.Severity != "CRITICAL" {
+		t.Errorf("expected severity backfilled to CRITICAL, got %q", a.Severity)
+	}
+	if a.Signal != "" {
+		t.Errorf("expected signal empty for legacy row, got %q", a.Signal)
+	}
+	if a.Service != "new-api" {
+		t.Errorf("expected service new-api, got %s", a.Service)
+	}
+	if a.Message != "legacy alert" {
+		t.Errorf("expected message 'legacy alert', got %s", a.Message)
+	}
+
+	// Step 4: Verify new alerts can be inserted with all fields
+	id, err := s.InsertAlert(Alert{
+		Type:      "WARNING",
+		Severity:  "WARNING",
+		Signal:    "config-drift",
+		Service:   "drift",
+		Message:   "new v1.8 alert",
+		Timestamp: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("InsertAlert after migration: %v", err)
+	}
+	if id <= 0 {
+		t.Fatalf("expected positive id, got %d", id)
+	}
+
+	alerts, _ = s.ListAlerts(10)
+	if len(alerts) != 2 {
+		t.Fatalf("expected 2 alerts total, got %d", len(alerts))
+	}
+}
+
+// TestMigrate_FreshDatabase verifies that migrate works on a completely fresh database.
+func TestMigrate_FreshDatabase(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "fresh.db")
+
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("store.New on fresh db: %v", err)
+	}
+	defer s.Close()
+
+	// Insert an alert with all v1.8 fields
+	id, err := s.InsertAlert(Alert{
+		Type:      "CRITICAL",
+		Severity:  "CRITICAL",
+		Signal:    "service-down",
+		Service:   "bifrost",
+		Message:   "fresh db test",
+		Timestamp: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("InsertAlert: %v", err)
+	}
+	if id <= 0 {
+		t.Fatalf("expected positive id, got %d", id)
+	}
+
+	alerts, _ := s.ListAlerts(10)
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(alerts))
+	}
+	if alerts[0].Severity != "CRITICAL" || alerts[0].Signal != "service-down" {
+		t.Errorf("unexpected severity=%q signal=%q", alerts[0].Severity, alerts[0].Signal)
+	}
+}
+
+// TestMigrate_Idempotent verifies that running migrate twice doesn't fail.
+func TestMigrate_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "idempotent.db")
+
+	// First open creates schema
+	s1, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("first store.New: %v", err)
+	}
+	s1.InsertAlert(Alert{Type: "INFO", Severity: "INFO", Signal: "test", Service: "s", Message: "m", Timestamp: time.Now()})
+	s1.Close()
+
+	// Second open runs migrate again — should not fail
+	s2, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("second store.New (idempotent): %v", err)
+	}
+	defer s2.Close()
+
+	alerts, _ := s2.ListAlerts(10)
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 alert after idempotent migration, got %d", len(alerts))
 	}
 }

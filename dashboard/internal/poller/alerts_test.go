@@ -36,6 +36,8 @@ func TestFireAlert_Dedup(t *testing.T) {
 
 	alert := store.Alert{
 		Type:      "WARNING",
+		Severity:  "WARNING",
+		Signal:    "config-drift",
 		Service:   "test-svc",
 		Message:   "test alert",
 		Timestamp: time.Now(),
@@ -44,7 +46,7 @@ func TestFireAlert_Dedup(t *testing.T) {
 	// Fire first alert
 	fireAlert(cfg, alert)
 
-	// Fire duplicate - should be suppressed
+	// Fire duplicate - should be suppressed (same severity+service)
 	fireAlert(cfg, alert)
 
 	alerts, err := st.ListAlerts(10)
@@ -56,7 +58,7 @@ func TestFireAlert_Dedup(t *testing.T) {
 	}
 }
 
-func TestFireAlert_DifferentTypes(t *testing.T) {
+func TestFireAlert_DifferentSeverities(t *testing.T) {
 	st := newTestStoreForPoller(t)
 	state := NewSystemState()
 
@@ -65,12 +67,12 @@ func TestFireAlert_DifferentTypes(t *testing.T) {
 		State: state,
 	}
 
-	fireAlert(cfg, store.Alert{Type: "WARNING", Service: "svc", Message: "warn", Timestamp: time.Now()})
-	fireAlert(cfg, store.Alert{Type: "CRITICAL", Service: "svc", Message: "crit", Timestamp: time.Now()})
+	fireAlert(cfg, store.Alert{Type: "WARNING", Severity: "WARNING", Signal: "config-drift", Service: "svc", Message: "warn", Timestamp: time.Now()})
+	fireAlert(cfg, store.Alert{Type: "CRITICAL", Severity: "CRITICAL", Signal: "service-down", Service: "svc", Message: "crit", Timestamp: time.Now()})
 
 	alerts, _ := st.ListAlerts(10)
 	if len(alerts) != 2 {
-		t.Errorf("expected 2 alerts for different types, got %d", len(alerts))
+		t.Errorf("expected 2 alerts for different severities, got %d", len(alerts))
 	}
 }
 
@@ -80,15 +82,12 @@ func TestFireAlert_Webhook(t *testing.T) {
 
 	var received bool
 	var mu sync.Mutex
+	var receivedAlert store.Alert
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 		received = true
-		var alert store.Alert
-		json.NewDecoder(r.Body).Decode(&alert)
-		if alert.Type != "CRITICAL" {
-			t.Errorf("webhook got type %s, want CRITICAL", alert.Type)
-		}
+		json.NewDecoder(r.Body).Decode(&receivedAlert)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -101,7 +100,9 @@ func TestFireAlert_Webhook(t *testing.T) {
 
 	fireAlert(cfg, store.Alert{
 		Type:      "CRITICAL",
-		Service:   "svc",
+		Severity:  "CRITICAL",
+		Signal:    "service-down",
+		Service:   "new-api",
 		Message:   "webhook test",
 		Timestamp: time.Now(),
 	})
@@ -112,7 +113,16 @@ func TestFireAlert_Webhook(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if !received {
-		t.Error("expected webhook to be called")
+		t.Fatal("expected webhook to be called")
+	}
+	if receivedAlert.Severity != "CRITICAL" {
+		t.Errorf("webhook got severity %s, want CRITICAL", receivedAlert.Severity)
+	}
+	if receivedAlert.Signal != "service-down" {
+		t.Errorf("webhook got signal %s, want service-down", receivedAlert.Signal)
+	}
+	if receivedAlert.Type != "CRITICAL" {
+		t.Errorf("webhook got type %s, want CRITICAL (backward compat)", receivedAlert.Type)
 	}
 }
 
@@ -143,8 +153,11 @@ func TestCheckAlerts_ZeroValidCookies(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected 1 CRITICAL alert, got %d", len(alerts))
 	}
-	if alerts[0].Type != "CRITICAL" {
-		t.Errorf("expected CRITICAL, got %s", alerts[0].Type)
+	if alerts[0].Severity != "CRITICAL" {
+		t.Errorf("expected severity CRITICAL, got %s", alerts[0].Severity)
+	}
+	if alerts[0].Signal != "cookie-exhaustion" {
+		t.Errorf("expected signal cookie-exhaustion, got %s", alerts[0].Signal)
 	}
 }
 
@@ -161,19 +174,22 @@ func TestCheckAlerts_HighUtilization(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected 1 WARNING alert, got %d", len(alerts))
 	}
-	if alerts[0].Type != "WARNING" {
-		t.Errorf("expected WARNING, got %s", alerts[0].Type)
+	if alerts[0].Severity != "WARNING" {
+		t.Errorf("expected severity WARNING, got %s", alerts[0].Severity)
+	}
+	if alerts[0].Signal != "cookie-exhaustion" {
+		t.Errorf("expected signal cookie-exhaustion, got %s", alerts[0].Signal)
 	}
 }
 
-func TestCheckAlerts_UnhealthyService(t *testing.T) {
+func TestCheckAlerts_UnhealthyService_Critical(t *testing.T) {
 	st := newTestStoreForPoller(t)
 	state := NewSystemState()
 
-	// Set service unhealthy and backdate unhealthySince
+	// new-api is a critical service — should fire CRITICAL
 	state.SetHealth("new-api", ServiceHealth{Status: "unhealthy"})
 	state.mu.Lock()
-	state.unhealthySince["new-api"] = time.Now().Add(-60 * time.Second) // 60s ago
+	state.unhealthySince["new-api"] = time.Now().Add(-60 * time.Second)
 	state.mu.Unlock()
 
 	cfg := Config{Store: st, State: state}
@@ -181,7 +197,35 @@ func TestCheckAlerts_UnhealthyService(t *testing.T) {
 
 	alerts, _ := st.ListAlerts(10)
 	if len(alerts) != 1 {
-		t.Fatalf("expected 1 alert for unhealthy service, got %d", len(alerts))
+		t.Fatalf("expected 1 alert for unhealthy new-api, got %d", len(alerts))
+	}
+	if alerts[0].Severity != "CRITICAL" {
+		t.Errorf("expected severity CRITICAL for new-api, got %s", alerts[0].Severity)
+	}
+	if alerts[0].Signal != "service-down" {
+		t.Errorf("expected signal service-down, got %s", alerts[0].Signal)
+	}
+}
+
+func TestCheckAlerts_UnhealthyClewdR_Info(t *testing.T) {
+	st := newTestStoreForPoller(t)
+	state := NewSystemState()
+
+	// A single ClewdR instance is INFO (Bifrost routes around it)
+	state.SetHealth("clewdr-1", ServiceHealth{Status: "unhealthy"})
+	state.mu.Lock()
+	state.unhealthySince["clewdr-1"] = time.Now().Add(-60 * time.Second)
+	state.mu.Unlock()
+
+	cfg := Config{Store: st, State: state}
+	checkAlerts(cfg)
+
+	alerts, _ := st.ListAlerts(10)
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 alert for unhealthy clewdr-1, got %d", len(alerts))
+	}
+	if alerts[0].Severity != "INFO" {
+		t.Errorf("expected severity INFO for single clewdr instance, got %s", alerts[0].Severity)
 	}
 }
 
@@ -212,6 +256,8 @@ func TestFireAlert_UpdatesState(t *testing.T) {
 
 	fireAlert(cfg, store.Alert{
 		Type:      "WARNING",
+		Severity:  "WARNING",
+		Signal:    "config-drift",
 		Service:   "test-svc",
 		Message:   "state update test",
 		Timestamp: time.Now(),
@@ -221,8 +267,11 @@ func TestFireAlert_UpdatesState(t *testing.T) {
 	if len(snap.Alerts) != 1 {
 		t.Fatalf("expected 1 alert in state, got %d", len(snap.Alerts))
 	}
-	if snap.Alerts[0].Type != "WARNING" {
-		t.Errorf("expected WARNING, got %s", snap.Alerts[0].Type)
+	if snap.Alerts[0].Severity != "WARNING" {
+		t.Errorf("expected WARNING, got %s", snap.Alerts[0].Severity)
+	}
+	if snap.Alerts[0].Signal != "config-drift" {
+		t.Errorf("expected config-drift, got %s", snap.Alerts[0].Signal)
 	}
 	if snap.Alerts[0].Service != "test-svc" {
 		t.Errorf("expected test-svc, got %s", snap.Alerts[0].Service)
@@ -240,10 +289,12 @@ func TestAppendAlert_Cap(t *testing.T) {
 
 	for i := 0; i < 110; i++ {
 		state.AppendAlert(store.Alert{
-			ID:      int64(i + 1),
-			Type:    "INFO",
-			Service: "svc",
-			Message: fmt.Sprintf("alert %d", i+1),
+			ID:       int64(i + 1),
+			Type:     "INFO",
+			Severity: "INFO",
+			Signal:   "test",
+			Service:  "svc",
+			Message:  fmt.Sprintf("alert %d", i+1),
 		})
 	}
 
@@ -257,5 +308,20 @@ func TestAppendAlert_Cap(t *testing.T) {
 	}
 	if snap.Alerts[99].ID != 110 {
 		t.Errorf("expected last alert ID 110, got %d", snap.Alerts[99].ID)
+	}
+}
+
+func TestServiceIsCritical(t *testing.T) {
+	critical := []string{"new-api", "bifrost", "nginx", "postgres"}
+	for _, name := range critical {
+		if !serviceIsCritical(name) {
+			t.Errorf("expected %s to be critical", name)
+		}
+	}
+	notCritical := []string{"clewdr-1", "redis", "unknown"}
+	for _, name := range notCritical {
+		if serviceIsCritical(name) {
+			t.Errorf("expected %s to NOT be critical", name)
+		}
 	}
 }

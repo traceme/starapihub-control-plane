@@ -21,7 +21,15 @@ func healthCmd() *cobra.Command {
 			newAPIURL := os.Getenv("NEWAPI_URL")
 			bifrostURL := os.Getenv("BIFROST_URL")
 			clewdrURLsStr := os.Getenv("CLEWDR_URLS")
-			clewdrToken := os.Getenv("CLEWDR_ADMIN_TOKEN")
+
+			// Token resolution: CLEWDR_ADMIN_TOKENS (plural, per-instance CSV)
+			// takes precedence, falling back to CLEWDR_ADMIN_TOKEN (singular).
+			clewdrTokens := resolveClewdRTokens()
+			// Health uses a single token — pick the first available.
+			clewdrToken := ""
+			if len(clewdrTokens) > 0 {
+				clewdrToken = clewdrTokens[0]
+			}
 
 			// Parse ClewdR URLs
 			var clewdrURLs []string

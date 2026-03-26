@@ -60,7 +60,20 @@ control-plane/
 │   ├── version-matrix.md      # Appliance-to-upstream compatibility matrix
 │   ├── patch-audit-workflow.md # Required review flow before any upstream patch
 │   ├── rollout-plan.md        # Phased rollout from dev to production
-│   └── unofficial-provider-risk.md  # ClewdR risk assessment
+│   ├── unofficial-provider-risk.md  # ClewdR risk assessment
+│   ├── openrouter-operations.md     # OpenRouter setup, sync, rotation, troubleshooting
+│   ├── provider-model-mapping.md    # Three-layer model name contract (public/channel/provider)
+│   ├── promotion-criteria.md        # Release promotion gates and evidence
+│   ├── rollback-runbook.md          # Upstream and appliance rollback procedures
+│   ├── release-status.md            # Current promoted/validated/failed versions
+│   ├── provider-onboarding.md       # Repeatable provider onboarding checklist
+│   ├── provider-secrets.md          # Credential map, rotation, backup, recovery
+│   ├── provider-verification.md     # Provider coverage matrix, failure classification
+│   ├── install.md                   # Canonical first-install guide (start here)
+│   ├── secrets-bootstrap.md         # First-run secret prerequisites and validation
+│   ├── backup-restore.md            # Backup scope, restore procedures, drill checklist
+│   ├── day-2-operations.md          # Daily/weekly checklists, failure triage, escalation
+│   └── alert-model.md              # Severity definitions and signal catalog (v1.8)
 ├── deploy/                    # Deployment skeletons
 │   ├── docker-compose.yml     # Full stack compose
 │   ├── README.md              # Deployment guide
@@ -75,6 +88,7 @@ control-plane/
 │   ├── route-policies.example.yaml
 │   └── provider-pools.example.yaml
 ├── scripts/                   # Operational scripts
+│   ├── starapihub-cron.sh     # Cron alert wrapper (install to /usr/local/bin/)
 │   ├── smoke/                 # Smoke test scripts
 │   └── sync/                  # Config generation and sync helpers
 └── tests/                     # Test documentation and fixtures
@@ -82,6 +96,10 @@ control-plane/
 ```
 
 ## Quick Start
+
+**New operators: start with [`docs/install.md`](docs/install.md)** for the canonical end-to-end install path.
+
+For deeper context:
 
 1. Read `docs/architecture.md` for the 4-layer architecture and design decisions.
 2. Read `docs/rollout-plan.md` for the phased deployment approach.

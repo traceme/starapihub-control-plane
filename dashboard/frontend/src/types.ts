@@ -38,7 +38,9 @@ export interface LogStats {
 
 export interface Alert {
   id: number;
-  type: 'critical' | 'warning' | 'info';
+  type: string;
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  signal: string;
   service: string;
   message: string;
   timestamp: string;
@@ -67,9 +69,60 @@ export interface LogicalModel {
   id: string;
   name: string;
   display_name: string;
+  billing_name: string;
+  description: string;
+  upstream_model: string;
   risk_level: 'low' | 'medium' | 'high';
+  allowed_groups: string[];
   channel: string;
+  route_policy: string;
+  unofficial_allowed: boolean;
+  caching_allowed: boolean;
   providers: ProviderEntry[];
+  live_providers: ProviderEntry[];
+  policy_warning?: string;
+}
+
+export interface ModelDetail {
+  name: string;
+  display_name: string;
+  billing_name: string;
+  description: string;
+  upstream_model: string;
+  risk_level: 'low' | 'medium' | 'high';
+  allowed_groups: string[];
+  channel: string;
+  route_policy: string;
+  unofficial_allowed: boolean;
+  caching_allowed: boolean;
+  model_ratio: number | null;
+  completion_ratio: number | null;
+  cache_ratio: number | null;
+  model_price: number | null;
+}
+
+export interface ModelFormData {
+  name: string;
+  display_name: string;
+  billing_name: string;
+  description: string;
+  upstream_model: string;
+  risk_level: 'low' | 'medium' | 'high';
+  allowed_groups: string[];
+  channel: string;
+  route_policy: string;
+  unofficial_allowed: boolean;
+  caching_allowed: boolean;
+  model_ratio: number | null;
+  completion_ratio: number | null;
+  cache_ratio: number | null;
+  model_price: number | null;
+}
+
+export interface ModelsMetadata {
+  channels: { id: string; name: string }[];
+  route_policies: { id: string; description: string }[];
+  risk_levels: string[];
 }
 
 export interface ProviderEntry {

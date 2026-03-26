@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,16 @@ func StartAlertChecker(ctx context.Context, cfg Config) {
 	}()
 }
 
+// serviceIsCritical returns true for services whose failure blocks all traffic.
+func serviceIsCritical(name string) bool {
+	switch name {
+	case "new-api", "bifrost", "nginx", "postgres":
+		return true
+	default:
+		return false
+	}
+}
+
 func checkAlerts(cfg Config) {
 	// Check ClewdR cookie alerts
 	cookies := cfg.State.GetCookies()
@@ -39,6 +50,8 @@ func checkAlerts(cfg Config) {
 		if cs.Valid == 0 && cs.Total > 0 {
 			fireAlert(cfg, store.Alert{
 				Type:      "CRITICAL",
+				Severity:  "CRITICAL",
+				Signal:    "cookie-exhaustion",
 				Service:   instance,
 				Message:   fmt.Sprintf("%s has 0 valid cookies out of %d total", instance, cs.Total),
 				Timestamp: time.Now(),
@@ -47,6 +60,8 @@ func checkAlerts(cfg Config) {
 		if cs.HighUtil > 0 {
 			fireAlert(cfg, store.Alert{
 				Type:      "WARNING",
+				Severity:  "WARNING",
+				Signal:    "cookie-exhaustion",
 				Service:   instance,
 				Message:   fmt.Sprintf("%s has %d cookies with >80%% utilization", instance, cs.HighUtil),
 				Timestamp: time.Now(),
@@ -60,8 +75,18 @@ func checkAlerts(cfg Config) {
 		if h.Status == "unhealthy" {
 			since, ok := cfg.State.GetUnhealthySince(name)
 			if ok && time.Since(since) > 30*time.Second {
+				sev := "WARNING"
+				if serviceIsCritical(name) {
+					sev = "CRITICAL"
+				}
+				// Single ClewdR instance down is INFO (Bifrost routes around it)
+				if strings.HasPrefix(name, "clewdr-") {
+					sev = "INFO"
+				}
 				fireAlert(cfg, store.Alert{
-					Type:      "WARNING",
+					Type:      sev,
+					Severity:  sev,
+					Signal:    "service-down",
 					Service:   name,
 					Message:   fmt.Sprintf("%s has been unhealthy for %s", name, time.Since(since).Round(time.Second)),
 					Timestamp: time.Now(),
@@ -76,8 +101,8 @@ func fireAlert(cfg Config, alert store.Alert) {
 	alertMu.Lock()
 	defer alertMu.Unlock()
 
-	// Deduplicate: don't fire the same alert type+service within 5 minutes
-	recent, err := cfg.Store.HasRecentAlert(alert.Type, alert.Service, 5*time.Minute)
+	// Deduplicate: don't fire the same severity+service within 5 minutes
+	recent, err := cfg.Store.HasRecentAlert(alert.Severity, alert.Service, 5*time.Minute)
 	if err != nil {
 		slog.Error("check recent alert", "error", err)
 		return
@@ -92,7 +117,7 @@ func fireAlert(cfg Config, alert store.Alert) {
 		return
 	}
 
-	slog.Warn("alert fired", "id", id, "type", alert.Type, "service", alert.Service, "message", alert.Message)
+	slog.Warn("alert fired", "id", id, "severity", alert.Severity, "signal", alert.Signal, "service", alert.Service, "message", alert.Message)
 
 	alert.ID = id
 	cfg.State.AppendAlert(alert)

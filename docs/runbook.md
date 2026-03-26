@@ -9,17 +9,17 @@ cd control-plane/deploy
 ls env/*.env
 
 # 2. Start the full stack
-docker-compose --env-file env/common.env up -d
+docker compose --env-file env/common.env up -d
 
 # 3. Wait for health checks (30-60 seconds)
 sleep 30
 
 # 4. Verify all services
-docker-compose ps
+docker compose ps
 # All should show "Up (healthy)"
 
-# 5. Run smoke tests
-cd .. && bash scripts/smoke/run-all.sh
+# 5. Run smoke tests (requires API_KEY — a client token from New-API admin UI)
+cd .. && API_KEY=$API_KEY bash scripts/smoke/run-all.sh
 ```
 
 ## Normal Shutdown
@@ -28,20 +28,20 @@ cd .. && bash scripts/smoke/run-all.sh
 cd control-plane/deploy
 
 # Graceful stop (preserves all data)
-docker-compose --env-file env/common.env down
+docker compose --env-file env/common.env down
 
 # Verify all stopped
-docker-compose ps
+docker compose ps
 ```
 
 ## Service Restart
 
 ```bash
 # Restart a single service
-docker-compose --env-file env/common.env restart bifrost
+docker compose --env-file env/common.env restart bifrost
 
 # Restart with fresh container (pulls same image)
-docker-compose --env-file env/common.env up -d --force-recreate bifrost
+docker compose --env-file env/common.env up -d --force-recreate bifrost
 ```
 
 ## Secret Rotation
@@ -55,7 +55,7 @@ docker-compose --env-file env/common.env up -d --force-recreate bifrost
 2. Update `deploy/env/common.env` and `deploy/env/new-api.env` with new password
 3. Restart New-API:
    ```bash
-   docker-compose --env-file env/common.env restart new-api
+   docker compose --env-file env/common.env restart new-api
    ```
 4. Verify health
 
@@ -67,10 +67,43 @@ docker-compose --env-file env/common.env up -d --force-recreate bifrost
 
 ### Rotate Official Provider API Keys
 
+All provider keys are synced to Bifrost via the sync engine's HTTP API. The same mechanism applies to Anthropic, OpenAI, and any other provider defined in `policies/providers.yaml`.
+
 1. Generate a new API key in the provider's dashboard (OpenAI, Anthropic, etc.)
-2. Update the key in Bifrost via Web UI or config.json
-3. If using config.json, remount and restart Bifrost
-4. Verify with a smoke test through the affected provider
+2. Update the env var in `deploy/env/bifrost.env` (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)
+3. Sync the new key to Bifrost:
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-your-new-key   # or whichever key you rotated
+   cd control-plane
+   ./dashboard/starapihub sync --target provider
+   ```
+4. Verify with a smoke request through the affected provider
+5. Revoke the old key in the provider's dashboard
+
+No Bifrost restart is needed — the sync pushes the key via Bifrost's live API. See [`docs/provider-secrets.md`](provider-secrets.md) for the complete credential map.
+
+### Rotate OpenRouter API Key
+
+OpenRouter keys are synced to Bifrost via the provider sync API, the same mechanism used for all providers. The sync engine resolves the env var at CLI runtime and pushes the value to Bifrost.
+
+1. Generate a new API key at the OpenRouter dashboard
+2. Update `OPENROUTER_API_KEY` in `deploy/env/bifrost.env`
+3. Sync the new key to Bifrost:
+   ```bash
+   export OPENROUTER_API_KEY=sk-or-v1-your-new-key
+   cd control-plane
+   ./dashboard/starapihub sync --target provider
+   ```
+4. Verify with a smoke request to an OpenRouter model:
+   ```bash
+   curl -s -H "Authorization: Bearer $API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"openai/gpt-5.4","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
+     http://localhost:3000/v1/chat/completions
+   ```
+5. Revoke the old key in the OpenRouter dashboard
+
+No Bifrost restart is needed — the sync pushes the key via Bifrost's live API. See [`docs/openrouter-operations.md`](openrouter-operations.md) for full details.
 
 ### Rotate ClewdR Cookies
 
@@ -78,21 +111,24 @@ See `docs/clewdr-operations.md` → Credential Rotation section.
 
 ## Adding/Removing Providers
 
-### Add a New Official Provider
+### Add a New Provider
 
-1. Add provider entry to `policies/provider-pools.example.yaml`
-2. Add key to Bifrost (via Web UI or config.json)
-3. Add relevant models to Bifrost key's `models` list
-4. If new models are exposed: update `policies/logical-models.example.yaml`
-5. If new models need New-API channels: create/update channels
-6. Smoke test the new provider
+Follow the full onboarding checklist in [`docs/provider-onboarding.md`](provider-onboarding.md). Summary:
+
+1. Add provider to `policies/providers.yaml` (key via env var reference)
+2. Add channel to `policies/channels.yaml` (with model mapping)
+3. Add routing rules to `policies/routing-rules.yaml`
+4. Add logical models to `policies/models.yaml`
+5. Add pricing to `policies/pricing.yaml`
+6. Set API key in `deploy/env/bifrost.env`
+7. `starapihub validate` → `starapihub sync` → smoke test
 
 ### Remove a Provider
 
-1. Remove provider key from Bifrost config
-2. Ensure other providers in the same pool can handle the load
-3. Remove from `policies/provider-pools.example.yaml`
-4. Restart Bifrost if using file-based config
+1. Remove entries from all five canonical policy files (`providers.yaml`, `channels.yaml`, `routing-rules.yaml`, `models.yaml`, `pricing.yaml`)
+2. Run `starapihub sync` to remove the provider from the live system
+3. Remove the API key env var from `deploy/env/bifrost.env`
+4. Verify: `starapihub diff` shows no blocking drift
 
 ### Add a ClewdR Instance
 
@@ -100,15 +136,21 @@ See `docs/clewdr-operations.md` → Scaling section.
 
 ## Monitoring Checklist
 
+For the full daily/weekly operator checklists with exact commands and expected outputs, see [`day-2-operations.md`](day-2-operations.md).
+
+Quick reference:
+
 Daily:
-- [ ] Check `docker-compose ps` — all services healthy
-- [ ] Check ClewdR cookie status in each instance's admin UI
-- [ ] Review New-API error logs: `docker logs cp-new-api --since 24h | grep -i error`
+- [ ] `docker compose ps` — all services healthy
+- [ ] `starapihub health` — CLI health check passes
+- [ ] `starapihub cookie-status` — ClewdR cookies above threshold (if using ClewdR)
+- [ ] Review nightly workflow result (if nightly is enabled)
 
 Weekly:
-- [ ] Review Bifrost routing logs for unusual error rates
-- [ ] Check disk usage on volumes: `docker system df`
-- [ ] Verify backup of PostgreSQL data
+- [ ] `starapihub diff` — no blocking drift
+- [ ] `docker system df` — disk usage acceptable
+- [ ] Verify PostgreSQL backup exists and is recent (see [`backup-restore.md`](backup-restore.md))
+- [ ] Review release status (see [`release-status.md`](release-status.md))
 
 ## Log Access
 
@@ -144,10 +186,10 @@ systemctl status docker
 
 # Bring up with fresh containers
 cd control-plane/deploy
-docker-compose --env-file env/common.env up -d
+docker compose --env-file env/common.env up -d
 
 # Check logs for the failing service
-docker-compose logs --tail 50 <service-name>
+docker compose logs --tail 50 <service-name>
 ```
 
 ### Bifrost is Down but New-API is Up
@@ -159,7 +201,7 @@ Clients will get 502 errors. New-API is returning errors because it can't reach 
 docker logs cp-bifrost --tail 50
 
 # Restart Bifrost
-docker-compose --env-file env/common.env restart bifrost
+docker compose --env-file env/common.env restart bifrost
 
 # If config is corrupted, mount a known-good config.json
 ```
@@ -176,11 +218,11 @@ docker logs cp-new-api --tail 50
 docker exec cp-postgres pg_isready -U newapi
 
 # Restart New-API
-docker-compose --env-file env/common.env restart new-api
+docker compose --env-file env/common.env restart new-api
 
 # If DB migration failed after upgrade, restore from backup:
 # docker exec -i cp-postgres psql -U newapi newapi < backup-YYYYMMDD.sql
-# docker-compose --env-file env/common.env restart new-api
+# docker compose --env-file env/common.env restart new-api
 ```
 
 ### All ClewdR Instances Down
@@ -192,7 +234,7 @@ Only affects `standard` (fallback) and `risky` (primary) traffic. Premium traffi
 for i in 1 2 3; do echo "=== ClewdR $i ===" && docker logs cp-clewdr-$i --tail 10; done
 
 # Restart all
-docker-compose --env-file env/common.env restart clewdr-1 clewdr-2 clewdr-3
+docker compose --env-file env/common.env restart clewdr-1 clewdr-2 clewdr-3
 
 # If cookies are all expired, see ClewdR operations doc for rotation
 ```
@@ -300,9 +342,9 @@ starapihub cookie-status
 ### Verification
 
 ```bash
-# Confirm valid cookie count is above threshold
+# Confirm valid cookie count is above threshold (per instance)
 starapihub cookie-status --min-valid 2
-# Should exit 0
+# Should exit 0 — fails if any instance has fewer than 2 valid cookies
 
 # Send a test request through risky tier
 curl -s https://localhost/v1/chat/completions \
@@ -372,6 +414,8 @@ starapihub diff
 
 ## Upgrade Rollback
 
+> **For appliance release rollback** (rolling back a promoted StarAPIHub version by image digest), see [`docs/rollback-runbook.md`](rollback-runbook.md). The procedure below covers upstream service version rollback (reverting image tags in env files).
+
 ### Symptoms
 
 - Service unhealthy after version upgrade
@@ -401,12 +445,12 @@ starapihub health
 
 # 2. Pull old image and recreate
 cd control-plane/deploy
-docker-compose --env-file env/common.env pull <service>
-docker-compose --env-file env/common.env up -d <service>
+docker compose --env-file env/common.env pull <service>
+docker compose --env-file env/common.env up -d <service>
 
 # 3. For New-API database rollback (if migration broke things):
 docker exec -i cp-postgres psql -U newapi newapi < backup-YYYYMMDD.sql
-docker-compose --env-file env/common.env restart new-api
+docker compose --env-file env/common.env restart new-api
 
 # 4. Re-run sync to ensure config matches
 starapihub sync
@@ -435,7 +479,7 @@ bash scripts/smoke/run-all.sh  # Smoke tests pass
 When users report errors, work through this checklist:
 
 1. **Identify the scope**: Is it all traffic, one model, one tier, or one user?
-2. **Check container health**: `docker-compose ps` — are all containers up?
+2. **Check container health**: `docker compose ps` — are all containers up?
 3. **Check the request path bottom-up**:
    - Can Bifrost reach providers? (`docker exec cp-bifrost wget -q -O - http://clewdr-1:8484/api/version`)
    - Can New-API reach Bifrost? (`docker exec cp-new-api wget -q -O - http://bifrost:8080/health`)

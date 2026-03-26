@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -18,6 +19,8 @@ type Store struct {
 type Alert struct {
 	ID           int64     `json:"id"`
 	Type         string    `json:"type"`
+	Severity     string    `json:"severity"`
+	Signal       string    `json:"signal"`
 	Service      string    `json:"service"`
 	Message      string    `json:"message"`
 	Timestamp    time.Time `json:"timestamp"`
@@ -76,9 +79,14 @@ func New(dbPath string) (*Store, error) {
 
 func migrate(db *sql.DB) error {
 	stmts := []string{
+		// v1.7 schema: alerts table without severity/signal columns.
+		// CREATE TABLE IF NOT EXISTS is a no-op when the table already exists,
+		// so this only creates the table on a fresh database.
 		`CREATE TABLE IF NOT EXISTS alerts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			type TEXT NOT NULL,
+			severity TEXT NOT NULL DEFAULT '',
+			signal TEXT NOT NULL DEFAULT '',
 			service TEXT NOT NULL,
 			message TEXT NOT NULL,
 			timestamp DATETIME NOT NULL DEFAULT (datetime('now')),
@@ -105,7 +113,34 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("exec %q: %w", s, err)
 		}
 	}
+
+	// v1.8 migration: add severity and signal columns to an existing v1.7 alerts table.
+	// ALTER TABLE ADD COLUMN fails if the column already exists, so we swallow that error.
+	alterStmts := []string{
+		`ALTER TABLE alerts ADD COLUMN severity TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE alerts ADD COLUMN signal TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, s := range alterStmts {
+		if _, err := db.Exec(s); err != nil {
+			// SQLite returns "duplicate column name" if column already exists — safe to ignore.
+			if !isDuplicateColumnError(err) {
+				return fmt.Errorf("exec %q: %w", s, err)
+			}
+		}
+	}
+
+	// Backfill: set severity = type for any legacy rows that have an empty severity.
+	// Signal is left empty for legacy rows — there is no reliable way to infer it.
+	if _, err := db.Exec(`UPDATE alerts SET severity = type WHERE severity = ''`); err != nil {
+		return fmt.Errorf("backfill severity: %w", err)
+	}
+
 	return nil
+}
+
+// isDuplicateColumnError returns true if the error is a SQLite "duplicate column name" error.
+func isDuplicateColumnError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column name")
 }
 
 func (s *Store) Close() error {
@@ -115,8 +150,8 @@ func (s *Store) Close() error {
 // InsertAlert creates a new alert.
 func (s *Store) InsertAlert(a Alert) (int64, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO alerts (type, service, message, timestamp) VALUES (?, ?, ?, ?)`,
-		a.Type, a.Service, a.Message, a.Timestamp,
+		`INSERT INTO alerts (type, severity, signal, service, message, timestamp) VALUES (?, ?, ?, ?, ?, ?)`,
+		a.Type, a.Severity, a.Signal, a.Service, a.Message, a.Timestamp,
 	)
 	if err != nil {
 		return 0, err
@@ -130,7 +165,7 @@ func (s *Store) ListAlerts(limit int) ([]Alert, error) {
 		limit = 100
 	}
 	rows, err := s.db.Query(
-		`SELECT id, type, service, message, timestamp, acknowledged FROM alerts ORDER BY timestamp DESC LIMIT ?`,
+		`SELECT id, type, severity, signal, service, message, timestamp, acknowledged FROM alerts ORDER BY timestamp DESC LIMIT ?`,
 		limit,
 	)
 	if err != nil {
@@ -142,7 +177,7 @@ func (s *Store) ListAlerts(limit int) ([]Alert, error) {
 	for rows.Next() {
 		var a Alert
 		var ack int
-		if err := rows.Scan(&a.ID, &a.Type, &a.Service, &a.Message, &a.Timestamp, &ack); err != nil {
+		if err := rows.Scan(&a.ID, &a.Type, &a.Severity, &a.Signal, &a.Service, &a.Message, &a.Timestamp, &ack); err != nil {
 			slog.Error("scan alert row", "error", err)
 			continue
 		}
@@ -297,12 +332,13 @@ func (s *Store) CleanupOldLogs(maxAge time.Duration) error {
 }
 
 // HasRecentAlert checks if a similar alert was already fired recently.
-func (s *Store) HasRecentAlert(alertType, service string, within time.Duration) (bool, error) {
+// Deduplicates on severity+service (not type, which is a backward-compat alias).
+func (s *Store) HasRecentAlert(severity, service string, within time.Duration) (bool, error) {
 	cutoff := time.Now().Add(-within)
 	var count int
 	err := s.db.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE type = ? AND service = ? AND timestamp > ?`,
-		alertType, service, cutoff,
+		`SELECT COUNT(*) FROM alerts WHERE severity = ? AND service = ? AND timestamp > ?`,
+		severity, service, cutoff,
 	).Scan(&count)
 	if err != nil {
 		return false, err

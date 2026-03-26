@@ -145,55 +145,66 @@ func New(opts BootstrapOptions) *Bootstrapper {
 // envGuidance maps env var names to actionable guidance strings.
 var envGuidance = map[string]string{
 	"NEWAPI_URL":        "Set NEWAPI_URL to the New-API base URL (e.g. http://newapi:3000). Export it or add to .env file.",
-	"NEWAPI_ADMIN_TOKEN": "Set NEWAPI_ADMIN_TOKEN to a valid New-API admin bearer token. Get one from New-API admin UI or POST /api/setup response.",
+	"NEWAPI_ADMIN_TOKEN": "Set NEWAPI_ADMIN_TOKEN to a valid New-API admin bearer token. Get one from New-API admin UI (Tokens page). Note: /api/setup does NOT return a token.",
 	"BIFROST_URL":       "Set BIFROST_URL to the Bifrost base URL (e.g. http://bifrost:8080). Export it or add to .env file.",
 	"CLEWDR_URLS":       "Set CLEWDR_URLS to comma-separated ClewdR instance URLs (e.g. http://clewdr-1:8484,http://clewdr-2:8484).",
-	"CLEWDR_ADMIN_TOKEN": "Set CLEWDR_ADMIN_TOKEN to the ClewdR admin bearer token.",
+	"CLEWDR_ADMIN_TOKEN": "Set CLEWDR_ADMIN_TOKENS (CSV, one per instance) or CLEWDR_ADMIN_TOKEN (single, applied to all) to the ClewdR admin bearer token(s).",
 }
 
 // ValidatePrereqs checks env vars are populated and policy files exist.
+// Prereqs are mode-aware: when --skip-sync is set, NEWAPI_ADMIN_TOKEN and
+// BIFROST_URL are not required (only the seed step needs NEWAPI_URL).
+// When sync will run, all three env vars and policy files are required.
 func (b *Bootstrapper) ValidatePrereqs() *StepResult {
 	start := time.Now()
 
 	var missing []PrereqItem
 
-	// Check env vars (by checking opts fields, which are populated from env vars).
-	// ClewdR is optional — the control plane may not have direct access to ClewdR
-	// instances (e.g. when ClewdR is on an internal Docker network).
-	checks := []struct {
-		value string
-		name  string
-	}{
-		{b.opts.NewAPIURL, "NEWAPI_URL"},
-		{b.opts.NewAPIAdminToken, "NEWAPI_ADMIN_TOKEN"},
-		{b.opts.BifrostURL, "BIFROST_URL"},
+	// NEWAPI_URL is always required (needed for both seed and sync).
+	if b.opts.NewAPIURL == "" {
+		missing = append(missing, PrereqItem{
+			Name:     "NEWAPI_URL",
+			Kind:     "env",
+			Guidance: envGuidance["NEWAPI_URL"],
+		})
 	}
-	for _, c := range checks {
-		if c.value == "" {
+
+	// NEWAPI_ADMIN_TOKEN and BIFROST_URL are only required when sync will run.
+	if !b.opts.SkipSync {
+		if b.opts.NewAPIAdminToken == "" {
 			missing = append(missing, PrereqItem{
-				Name:     c.name,
+				Name:     "NEWAPI_ADMIN_TOKEN",
 				Kind:     "env",
-				Guidance: envGuidance[c.name],
+				Guidance: envGuidance["NEWAPI_ADMIN_TOKEN"],
+			})
+		}
+		if b.opts.BifrostURL == "" {
+			missing = append(missing, PrereqItem{
+				Name:     "BIFROST_URL",
+				Kind:     "env",
+				Guidance: envGuidance["BIFROST_URL"],
 			})
 		}
 	}
 
-	// Check policy files
-	fileChecks := []struct {
-		name     string
-		guidance string
-	}{
-		{"channels.yaml", "Create channels.yaml in the policies directory. See control-plane/policies/channels.yaml for an example."},
-		{"providers.yaml", "Create providers.yaml in the policies directory. See control-plane/policies/providers.yaml for an example."},
-	}
-	for _, fc := range fileChecks {
-		path := filepath.Join(b.opts.ConfigDir, fc.name)
-		if _, err := os.Stat(path); err != nil {
-			missing = append(missing, PrereqItem{
-				Name:     fc.name,
-				Kind:     "file",
-				Guidance: fc.guidance,
-			})
+	// Policy files are only needed when sync will run.
+	if !b.opts.SkipSync {
+		fileChecks := []struct {
+			name     string
+			guidance string
+		}{
+			{"channels.yaml", "Create channels.yaml in the policies directory. See control-plane/policies/channels.yaml for an example."},
+			{"providers.yaml", "Create providers.yaml in the policies directory. See control-plane/policies/providers.yaml for an example."},
+		}
+		for _, fc := range fileChecks {
+			path := filepath.Join(b.opts.ConfigDir, fc.name)
+			if _, err := os.Stat(path); err != nil {
+				missing = append(missing, PrereqItem{
+					Name:     fc.name,
+					Kind:     "file",
+					Guidance: fc.guidance,
+				})
+			}
 		}
 	}
 
